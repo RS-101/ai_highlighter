@@ -1,23 +1,39 @@
 // Listen for messages from background script
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log('Content script received message:', message);
   if (message.action === "processPDF") {
-    processPDF();
+    processPDF().then(sendResponse).catch(error => {
+      console.error('Error processing PDF:', error);
+      sendResponse({ error: error.message });
+    });
+    return true; // Will respond asynchronously
   }
 });
 
 async function processPDF() {
   try {
-    // Wait for PDF.js to load the document
-    await waitForPDFLoad();
+    console.log('Starting PDF processing...');
+    
+    // Get the PDF file as Uint8Array
+    const pdfData = await getPDFAsUint8Array();
+    console.log('PDF data loaded, length:', pdfData.length);
     
     // Extract text from PDF
-    const text = await extractPDFText();
+    const text = await extractPDFText(pdfData);
+    console.log('Extracted text length:', text ? text.length : 0);
+    
+    if (!text) {
+      throw new Error('No text could be extracted from the PDF');
+    }
     
     // Send text to background script for summarization
+    console.log('Sending text to background script for summarization...');
     const response = await browser.runtime.sendMessage({
       action: "summarizePDF",
       text: text
     });
+    
+    console.log('Received response from background script:', response);
     
     if (response.error) {
       throw new Error(response.error);
@@ -25,43 +41,109 @@ async function processPDF() {
     
     // Display summary
     displaySummary(response.summary);
+    return { success: true };
   } catch (error) {
     console.error('Error processing PDF:', error);
-    displayError('Failed to process PDF');
+    displayError(error.message || 'Failed to process PDF');
+    throw error;
   }
 }
 
-function waitForPDFLoad() {
-  return new Promise((resolve) => {
-    // Check if PDF.js is already loaded
-    if (document.querySelector('.pdfViewer')) {
-      resolve();
-    } else {
-      // Wait for PDF.js to load
-      const observer = new MutationObserver((mutations, obs) => {
-        if (document.querySelector('.pdfViewer')) {
-          obs.disconnect();
-          resolve();
-        }
-      });
-      
-      observer.observe(document.body, {
-        childList: true,
-        subtree: true
-      });
+async function getPDFAsUint8Array() {
+  return new Promise((resolve, reject) => {
+    // Get the PDF viewer iframe
+    const pdfViewer = document.querySelector('#viewer') || 
+                     document.querySelector('.pdfViewer') ||
+                     document.querySelector('embed[type="application/pdf"]') ||
+                     document.querySelector('object[type="application/pdf"]');
+                     
+    if (!pdfViewer) {
+      reject(new Error('No PDF viewer found'));
+      return;
     }
+
+    // Create a FileReader
+    const reader = new FileReader();
+    
+    // Get the PDF file from the viewer
+    const pdfFile = pdfViewer.files?.[0] || pdfViewer.contentDocument?.files?.[0];
+    if (!pdfFile) {
+      reject(new Error('No PDF file found in viewer'));
+      return;
+    }
+
+    // Read the file as ArrayBuffer
+    reader.readAsArrayBuffer(pdfFile);
+    
+    reader.onload = function(e) {
+      try {
+        // Convert ArrayBuffer to Uint8Array
+        const uint8Array = new Uint8Array(e.target.result);
+        resolve(uint8Array);
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = function(error) {
+      reject(error);
+    };
   });
 }
 
-async function extractPDFText() {
-  // This is a placeholder for actual PDF text extraction
-  // You would need to implement the actual text extraction logic
-  // This might involve using PDF.js's API or other PDF parsing libraries
-  const text = '';
-  return text;
+async function extractPDFText(pdfData) {
+  console.log('Starting text extraction...');
+  try {
+    // Load PDF.js
+    const pdfjsLib = await loadPDFJS();
+    
+    // Load the PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: pdfData });
+    const pdf = await loadingTask.promise;
+    console.log('PDF loaded, pages:', pdf.numPages);
+    
+    // Extract text from all pages
+    let extractedText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      console.log(`Processing page ${i}`);
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      extractedText += pageText + '\n\n';
+    }
+    
+    console.log('Text extraction complete');
+    return extractedText.trim();
+  } catch (error) {
+    console.error('Error extracting text:', error);
+    return '';
+  }
+}
+
+async function loadPDFJS() {
+  return new Promise((resolve, reject) => {
+    // Check if PDF.js is already loaded
+    if (window['pdfjs-dist/build/pdf']) {
+      resolve(window['pdfjs-dist/build/pdf']);
+      return;
+    }
+
+    // Load PDF.js dynamically
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      // Initialize PDF.js worker
+      const pdfjsLib = window['pdfjs-dist/build/pdf'];
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve(pdfjsLib);
+    };
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
 }
 
 function displaySummary(summary) {
+  console.log('Displaying summary...');
   // Create and show summary overlay
   const overlay = document.createElement('div');
   overlay.id = 'pdf-summary-overlay';
@@ -94,9 +176,11 @@ function displaySummary(summary) {
   `;
   
   document.body.appendChild(overlay);
+  console.log('Summary displayed');
 }
 
 function displayError(message) {
+  console.error('Displaying error:', message);
   const errorDiv = document.createElement('div');
   errorDiv.style.cssText = `
     position: fixed;

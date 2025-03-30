@@ -4,9 +4,11 @@
   "version": "1.0",
   "description": "Automatically summarizes PDF files as you view them",
   "permissions": [
-    "activeTab",
+    "<all_urls>",
+    "webNavigation",
+    "tabs",
     "storage",
-    "https://*/*"
+    "file://*/*"
   ],
   "background": {
     "scripts": ["background.js"],
@@ -14,8 +16,9 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*/*"],
-      "js": ["content.js"]
+      "matches": ["<all_urls>", "file://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
     }
   ],
   "browser_action": {
