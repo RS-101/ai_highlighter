@@ -1,55 +1,80 @@
-// Listen for navigation events
-browser.webNavigation.onCompleted.addListener(async (details) => {
-  console.log('Navigation completed:', details);
+console.log("[Background] Script loaded");
+console.log("[Background] Browser API available:", !!browser);
+console.log("[Background] Downloads API available:", !!(browser && browser.downloads));
+console.log("[Background] Runtime API available:", !!(browser && browser.runtime));
+
+// Store the current PDF URL
+let currentPDFUrl = null;
+
+// Listen for web navigation events
+browser.webNavigation.onCompleted.addListener((details) => {
+  console.log("[Background] Navigation completed:", details);
   
-  // Check if the URL is a PDF
-  if (details.url.toLowerCase().endsWith('.pdf') || details.url.startsWith('file://')) {
-    console.log('PDF detected, attempting to inject content script');
-    try {
-      // For local files, we need to handle them differently
-      if (details.url.startsWith('file://')) {
-        // First try to inject the content script
-        await browser.tabs.executeScript(details.tabId, {
-          file: 'content.js',
-          runAt: 'document_start'
-        });
-        
-        // Wait a bit for the script to initialize
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } else {
-        // For remote PDFs, use the normal injection method
-        await browser.tabs.executeScript(details.tabId, {
-          file: 'content.js'
-        });
-      }
-      
-      // Send message to process PDF
-      await browser.tabs.sendMessage(details.tabId, {
-        action: "processPDF"
-      });
-      
-      console.log('Content script injected and message sent');
-    } catch (error) {
-      console.error('Error injecting content script:', error);
-    }
+  // Check if the URL ends with .pdf
+  if (details.url && details.url.toLowerCase().endsWith('.pdf')) {
+    console.log("[Background] PDF detected:", details.url);
+    currentPDFUrl = details.url;
+    
+    // Instead of downloading, we'll try to extract content directly
+    browser.tabs.sendMessage(details.tabId, {
+      type: "EXTRACT_PDF_CONTENT",
+      url: details.url
+    }).catch(error => {
+      console.error("[Background] Error sending message to content script:", error);
+      // If we can't send the message, try an alternative approach
+      handlePDFContent(details.url);
+    });
   }
 });
 
-// Listen for messages from content script
+// Alternative PDF handling method
+async function handlePDFContent(url) {
+  try {
+    console.log("[Background] Attempting to fetch PDF content:", url);
+    const response = await fetch(url);
+    const blob = await response.blob();
+    console.log("[Background] PDF blob received:", blob.size, "bytes");
+    
+    // Here you can process the PDF blob
+    // For example, you could send it to your backend
+    // or use a PDF.js worker to process it locally
+    
+    // Store the URL for later use
+    currentPDFUrl = url;
+  } catch (error) {
+    console.error("[Background] Error handling PDF:", error);
+  }
+}
+
+// Listen for messages from popup
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('Background script received message:', message);
+  console.log("[Background] Received message:", message);
   
-  if (message.action === "summarizePDF") {
-    console.log('Starting PDF summarization...');
-    // Call the summarization API
+  if (message.type === "GET_PDF_CONTENT") {
+    if (currentPDFUrl) {
+      handlePDFContent(currentPDFUrl)
+        .then(() => {
+          sendResponse({ status: "success", url: currentPDFUrl });
+        })
+        .catch(error => {
+          sendResponse({ status: "error", message: error.message });
+        });
+      return true; // Will respond asynchronously
+    } else {
+      sendResponse({ status: "error", message: "No PDF URL available" });
+    }
+  }
+  
+  if (message.type === "SUMMARIZE_PDF") {
+    console.log("[Background] Starting PDF summarization...");
     summarizeText(message.text)
       .then(summary => {
-        console.log('Summarization successful');
-        sendResponse({ summary });
+        console.log("[Background] Summarization successful");
+        sendResponse({ status: "success", summary });
       })
       .catch(error => {
-        console.error('Error summarizing PDF:', error);
-        sendResponse({ error: error.message || 'Failed to summarize PDF' });
+        console.error("[Background] Error summarizing PDF:", error);
+        sendResponse({ status: "error", message: error.message });
       });
     return true; // Will respond asynchronously
   }
@@ -59,7 +84,7 @@ async function summarizeText(text) {
   const AWANLLM_API_KEY = 'd75d2637-5931-4cac-910b-8ad89b33e4a3';
   
   try {
-    console.log('Sending request to AwanLLM API...');
+    console.log("[Background] Sending request to AwanLLM API...");
     const response = await fetch("https://api.awanllm.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -87,25 +112,25 @@ async function summarizeText(text) {
       })
     });
 
-    console.log('API Response status:', response.status);
+    console.log("[Background] API Response status:", response.status);
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('API Error response:', errorText);
+      console.error("[Background] API Error response:", errorText);
       throw new Error(`API request failed with status ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
-    console.log('API Response data:', data);
+    console.log("[Background] API Response data:", data);
     
     if (data.choices && data.choices[0] && data.choices[0].message) {
       return data.choices[0].message.content;
     } else {
-      console.error('Unexpected API response format:', data);
+      console.error("[Background] Unexpected API response format:", data);
       throw new Error('Unexpected API response format');
     }
   } catch (error) {
-    console.error('Error in summarization:', error);
+    console.error("[Background] Error in summarization:", error);
     throw error;
   }
 } 

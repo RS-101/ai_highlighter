@@ -4,19 +4,27 @@
   "version": "1.0",
   "description": "Automatically summarizes PDF files as you view them",
   "permissions": [
-    "<all_urls>",
+    "*://*.limesumsar.dk/*",
+    "*://limesumsar.dk/*",
+    "file://*/*",
     "webNavigation",
     "tabs",
     "storage",
-    "file://*/*"
+    "webRequest",
+    "webRequestBlocking",
+    "*://*/*"
   ],
   "background": {
     "scripts": ["background.js"],
-    "persistent": false
+    "persistent": true
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>", "file://*/*"],
+      "matches": [
+        "*://*.limesumsar.dk/*",
+        "*://limesumsar.dk/*",
+        "file://*/*"
+      ],
       "js": ["content.js"],
       "run_at": "document_start"
     }
