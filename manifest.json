@@ -18,17 +18,6 @@
     "scripts": ["background.js"],
     "persistent": true
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "*://*.limesumsar.dk/*",
-        "*://limesumsar.dk/*",
-        "file://*/*"
-      ],
-      "js": ["content.js"],
-      "run_at": "document_start"
-    }
-  ],
   "browser_action": {
     "default_popup": "popup.html",
     "default_icon": {
