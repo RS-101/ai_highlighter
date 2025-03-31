@@ -3,8 +3,9 @@ console.log("[Background] Browser API available:", !!browser);
 console.log("[Background] Downloads API available:", !!(browser && browser.downloads));
 console.log("[Background] Runtime API available:", !!(browser && browser.runtime));
 
-// Store the current PDF URL
+// Store the current PDF URL and content
 let currentPDFUrl = null;
+let currentPDFBlob = null;
 
 // Listen for web navigation events
 browser.webNavigation.onCompleted.addListener((details) => {
@@ -15,34 +16,29 @@ browser.webNavigation.onCompleted.addListener((details) => {
     console.log("[Background] PDF detected:", details.url);
     currentPDFUrl = details.url;
     
-    // Instead of downloading, we'll try to extract content directly
-    browser.tabs.sendMessage(details.tabId, {
-      type: "EXTRACT_PDF_CONTENT",
-      url: details.url
-    }).catch(error => {
-      console.error("[Background] Error sending message to content script:", error);
-      // If we can't send the message, try an alternative approach
-      handlePDFContent(details.url);
+    // Try to fetch the PDF content
+    fetchPDFContent(details.url).catch(error => {
+      console.error("[Background] Error fetching PDF content:", error);
     });
   }
 });
 
-// Alternative PDF handling method
-async function handlePDFContent(url) {
+// Fetch and store PDF content
+async function fetchPDFContent(url) {
   try {
     console.log("[Background] Attempting to fetch PDF content:", url);
     const response = await fetch(url);
     const blob = await response.blob();
     console.log("[Background] PDF blob received:", blob.size, "bytes");
     
-    // Here you can process the PDF blob
-    // For example, you could send it to your backend
-    // or use a PDF.js worker to process it locally
-    
-    // Store the URL for later use
+    // Store the blob for later use
+    currentPDFBlob = blob;
     currentPDFUrl = url;
+    
+    return blob;
   } catch (error) {
     console.error("[Background] Error handling PDF:", error);
+    throw error;
   }
 }
 
@@ -52,29 +48,38 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   
   if (message.type === "GET_PDF_CONTENT") {
     if (currentPDFUrl) {
-      handlePDFContent(currentPDFUrl)
-        .then(() => {
-          sendResponse({ status: "success", url: currentPDFUrl });
-        })
-        .catch(error => {
-          sendResponse({ status: "error", message: error.message });
-        });
-      return true; // Will respond asynchronously
+      console.log("[Background] Returning PDF URL:", currentPDFUrl);
+      sendResponse({ 
+        status: "success", 
+        url: currentPDFUrl,
+        hasBlob: !!currentPDFBlob
+      });
     } else {
+      console.log("[Background] No PDF URL available");
       sendResponse({ status: "error", message: "No PDF URL available" });
     }
+    return;
   }
   
   if (message.type === "SUMMARIZE_PDF") {
     console.log("[Background] Starting PDF summarization...");
-    summarizeText(message.text)
+    const textToSummarize = message.text || "No text provided";
+    console.log("[Background] Text length:", textToSummarize.length);
+    
+    summarizeText(textToSummarize)
       .then(summary => {
         console.log("[Background] Summarization successful");
-        sendResponse({ status: "success", summary });
+        sendResponse({ 
+          status: "success", 
+          summary: summary 
+        });
       })
       .catch(error => {
         console.error("[Background] Error summarizing PDF:", error);
-        sendResponse({ status: "error", message: error.message });
+        sendResponse({ 
+          status: "error", 
+          message: error.message 
+        });
       });
     return true; // Will respond asynchronously
   }
