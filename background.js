@@ -25,13 +25,20 @@ loadSettings();
 
 // Function to load settings from storage
 function loadSettings() {
-  browser.storage.local.get('settings').then(result => {
+  browser.storage.local.get(['settings', 'apiKey']).then(result => {
     if (result.settings) {
       settings = result.settings;
       console.log("[Background] Loaded settings:", settings);
     } else {
       // Initialize with default settings if none exist
       saveSettings();
+    }
+    
+    // Set API key if available
+    if (result.apiKey) {
+      console.log("[Background] API key loaded from storage");
+    } else {
+      console.log("[Background] No API key found in storage");
     }
   }).catch(error => {
     console.error("[Background] Error loading settings:", error);
@@ -311,9 +318,15 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function summarizeText(text) {
-  const AWANLLM_API_KEY = 'd75d2637-5931-4cac-910b-8ad89b33e4a3';
-  
   try {
+    // Get API key from storage
+    const result = await browser.storage.local.get('apiKey');
+    const apiKey = result.apiKey;
+    
+    if (!apiKey) {
+      throw new Error('API key not found. Please add your API key in the extension settings.');
+    }
+    
     // Ensure text is limited to 2300 characters
     const limitedText = limitContentSize(text, 2300);
     console.log(`[Background] Text length for API: ${limitedText.length} characters`);
@@ -322,7 +335,7 @@ async function summarizeText(text) {
     const response = await fetch("https://api.awanllm.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${AWANLLM_API_KEY}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({

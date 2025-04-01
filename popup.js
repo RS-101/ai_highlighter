@@ -67,59 +67,108 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Disable the button initially
   summarizeButton.disabled = true;
+  summarizeButton.textContent = "Checking configuration...";
   
-  // Check what content is currently open
-  browser.runtime.sendMessage({ type: "GET_CURRENT_CONTENT" })
-    .then(response => {
-      console.log("[Popup] Response from background:", response);
+  // Check for API key first
+  checkApiKey().then(hasApiKey => {
+    if (!hasApiKey) {
+      summarizeButton.disabled = true;
+      summarizeButton.textContent = "API Key Required";
+      showStatus('Please add your API key in the Settings tab', 'error');
       
-      if (response && response.status === "success") {
-        // Store the content state
-        contentState = {
-          url: response.url,
-          isPDF: response.isPDF,
-          tabId: response.tabId
-        };
+      // Switch to settings tab
+      tabs.forEach(t => t.classList.remove('active'));
+      tabContents.forEach(c => c.classList.remove('active'));
+      
+      document.querySelector('.tab[data-tab="settings"]').classList.add('active');
+      document.getElementById('settings-tab').classList.add('active');
+      return;
+    }
+    
+    // Continue with checking content type if API key exists
+    checkContentType();
+  });
+  
+  // Function to check API key
+  async function checkApiKey() {
+    try {
+      const result = await browser.storage.local.get('apiKey');
+      return !!(result && result.apiKey);
+    } catch (error) {
+      console.error('[Popup] Error checking API key:', error);
+      return false;
+    }
+  }
+  
+  // Function to check content type
+  function checkContentType() {
+    // Check what content is currently open
+    browser.runtime.sendMessage({ type: "GET_CURRENT_CONTENT" })
+      .then(response => {
+        console.log("[Popup] Response from background:", response);
         
-        // Enable the button and update UI based on content type
-        summarizeButton.disabled = false;
-        summarizeButton.textContent = contentState.isPDF ? 
-          "Summarize PDF" : "Summarize Page";
-          
-        // If we have a cached summary, display it immediately
-        if (response.hasCachedSummary && response.summary && response.highlights) {
-          console.log("[Popup] Using cached summary from background");
-          
-          // Create analysis result from cached data
-          const analysisResult = {
-            summary: response.summary,
-            highlights: response.highlights
+        if (response && response.status === "success") {
+          // Store the content state
+          contentState = {
+            url: response.url,
+            isPDF: response.isPDF,
+            tabId: response.tabId
           };
           
-          // Display the summary and highlights
-          showStatus('Showing cached summary', 'success');
-          displaySummaryAndHighlights(analysisResult, contentState.isPDF);
-          
-          // Show time since generation
-          const timeAgo = getTimeAgo(response.timestamp);
-          showTimestamp(timeAgo);
-          
-          // Apply highlights if it's a webpage (they might have been removed)
-          if (!contentState.isPDF) {
-            applyWebpageHighlights(analysisResult.highlights);
+          // Enable the button and update UI based on content type
+          summarizeButton.disabled = false;
+          summarizeButton.textContent = contentState.isPDF ? 
+            "Summarize PDF" : "Summarize Page";
+            
+          // If we have a cached summary, display it immediately
+          if (response.hasCachedSummary && response.summary && response.highlights) {
+            console.log("[Popup] Using cached summary from background");
+            
+            // Create analysis result from cached data
+            const analysisResult = {
+              summary: response.summary,
+              highlights: response.highlights
+            };
+            
+            // Display the summary and highlights
+            showStatus('Showing cached summary', 'success');
+            displaySummaryAndHighlights(analysisResult, contentState.isPDF);
+            
+            // Show time since generation
+            const timeAgo = getTimeAgo(response.timestamp);
+            showTimestamp(timeAgo);
+            
+            // Apply highlights if it's a webpage (they might have been removed)
+            if (!contentState.isPDF) {
+              applyWebpageHighlights(analysisResult.highlights);
+            }
           }
+        } else {
+          showStatus('No content detected. Please open a page or PDF first.', 'error');
         }
-      } else {
-        showStatus('No content detected. Please open a page or PDF first.', 'error');
-      }
-    })
-    .catch(error => {
-      console.error('[Popup] Error checking content:', error);
-      showStatus('Error connecting to extension: ' + error.message, 'error');
-    });
+      })
+      .catch(error => {
+        console.error('[Popup] Error checking content:', error);
+        showStatus('Error connecting to extension: ' + error.message, 'error');
+      });
+  }
 
   summarizeButton.addEventListener('click', async () => {
     try {
+      // Check for API key first
+      const hasApiKey = await checkApiKey();
+      if (!hasApiKey) {
+        showStatus('API key is required. Please add it in the Settings tab.', 'error');
+        
+        // Switch to settings tab
+        tabs.forEach(t => t.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        
+        document.querySelector('.tab[data-tab="settings"]').classList.add('active');
+        document.getElementById('settings-tab').classList.add('active');
+        return;
+      }
+      
       // Update button state
       summarizeButton.disabled = true;
       summarizeButton.innerHTML = '<span class="loading"></span> Processing...';
@@ -431,6 +480,55 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error("[Popup] Error applying highlights:", error);
     });
   }
+
+  // API Key functionality
+  const apiKeyInput = document.getElementById('api-key');
+  const saveApiKeyButton = document.getElementById('save-api-key');
+  
+  // Load API key if available
+  browser.storage.local.get('apiKey').then(result => {
+    if (result.apiKey) {
+      apiKeyInput.value = result.apiKey;
+      apiKeyInput.placeholder = "API key saved";
+    } else {
+      apiKeyInput.placeholder = "⚠️ API key required";
+      // Add a red border to highlight the required field
+      apiKeyInput.style.border = "1px solid #ff4444";
+    }
+  });
+  
+  // Save API key
+  saveApiKeyButton.addEventListener('click', () => {
+    const apiKey = apiKeyInput.value.trim();
+    if (!apiKey) {
+      showStatus('Please enter a valid API key', 'error');
+      return;
+    }
+    
+    browser.storage.local.set({ apiKey })
+      .then(() => {
+        showStatus('API key saved successfully!', 'success');
+        apiKeyInput.placeholder = "API key saved";
+        apiKeyInput.style.border = "1px solid #ccc";
+        
+        // Enable the summarize button and return to main tab
+        const summarizeButton = document.getElementById('summarize');
+        summarizeButton.disabled = false;
+        summarizeButton.textContent = contentState.isPDF ? "Summarize PDF" : "Summarize Page";
+        
+        // Check content type after saving API key
+        checkContentType();
+        
+        // Switch back to main tab after 1 second
+        setTimeout(() => {
+          document.querySelector('.tab[data-tab="main"]').click();
+        }, 1000);
+      })
+      .catch(error => {
+        console.error('Error saving API key:', error);
+        showStatus('Error saving API key', 'error');
+      });
+  });
 });
 
 function showStatus(message, type) {

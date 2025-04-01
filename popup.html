@@ -175,7 +175,14 @@
     }
     
     .settings-section {
-      margin-bottom: 15px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 20px;
+    }
+    
+    .settings-section h4 {
+      margin-top: 0;
+      color: #333;
     }
     
     .site-list {
@@ -228,6 +235,34 @@
     .remove-site:hover {
       background-color: #cc0000;
     }
+    
+    /* API Key styles */
+    .api-key-container {
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+    }
+    
+    .api-key-container label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    
+    .api-key-container input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    
+    .api-note {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
   </style>
   <!-- Load PDF.js library -->
   <script src="../lib/pdf.min.js"></script>
@@ -271,6 +306,16 @@
           <input type="checkbox" id="auto-summarize-toggle"> 
           Enable automatic summarization
         </label>
+      </div>
+      
+      <div class="settings-section">
+        <h4>API Key Settings</h4>
+        <div class="api-key-container">
+          <label for="api-key">Anwall API Key:</label>
+          <input type="password" id="api-key" placeholder="Enter your API key">
+          <button id="save-api-key" class="button">Save API Key</button>
+        </div>
+        <p class="api-note">Your API key is stored locally and never shared.</p>
       </div>
       
       <div class="settings-section">
