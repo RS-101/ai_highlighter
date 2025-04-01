@@ -1,51 +1,78 @@
-# PDF Auto Summarizer Firefox Extension
+# AI Highlighter
 
-This Firefox extension automatically summarizes PDF files as you view them in your browser.
+A Firefox extension that intelligently summarizes webpages and PDF documents while highlighting key passages for easier reading.
 
 ## Features
 
-- Automatically detects when you're viewing a PDF file
-- Extracts text from the PDF
-- Generates a summary using AI/ML technology
-- Displays the summary in a clean, non-intrusive overlay
-- Manual summarization option through the extension popup
+- **Smart Summarization**: Analyzes webpages and PDF files to provide concise summaries
+- **Intelligent Highlighting**: Automatically identifies and highlights important passages
+- **PDF Support**: Extracts and summarizes text from PDF files
+- **Toggle Highlights**: Easily toggle highlights on and off with a single click
+- **Settings Management**: Configure auto-summarization for specific websites
 
 ## Installation
 
-1. Clone or download this repository
-2. Open Firefox and go to `about:debugging`
-3. Click "This Firefox" on the left sidebar
+### From Firefox Add-ons Store
+1. Visit the [Firefox Add-ons Store](https://addons.mozilla.org/en-US/firefox/addon/ai-highlighter/)
+2. Click "Add to Firefox"
+3. Follow the prompts to complete installation
+
+### Manual Installation (Developer Mode)
+1. Download the latest release ZIP file
+2. Open Firefox and navigate to `about:debugging`
+3. Click "This Firefox"
 4. Click "Load Temporary Add-on"
-5. Navigate to the extension directory and select the `manifest.json` file
+5. Select the downloaded ZIP file
+
+## Setup
+
+1. After installation, click on the AI Highlighter icon in your toolbar
+2. Go to the "Settings" tab
+3. Enter your Anwall API key in the API Key field
+4. Click "Save API Key"
 
 ## Usage
 
-1. The extension will automatically detect when you're viewing a PDF file
-2. It will process the PDF and display a summary in the top-right corner
-3. You can also click the extension icon and use the "Summarize Current PDF" button to manually trigger summarization
-4. To dismiss the summary, click the × button in the top-right corner of the summary overlay
+### Summarizing Content
+1. Navigate to a webpage or PDF file you want to summarize
+2. Click the AI Highlighter extension icon
+3. Click "Summarize Page" or "Summarize PDF"
+4. View the summary and key highlights
 
-## Development
+### Managing Highlights
+- For webpages: Use the "Toggle Highlights" button to show/hide highlights
+- Highlighted text appears with a yellow background on the page
+- For PDFs: Important passages are displayed in the extension popup
 
-To modify or enhance the extension:
+### Auto-Summarization
+1. Go to the "Settings" tab
+2. Enable "Enable automatic summarization"
+3. Add domains you want auto-summarized (e.g., "example.com")
+4. Click "Save Settings"
 
-1. Make your changes to the source files
-2. Reload the extension in `about:debugging`
-3. Test your changes
+## API Key
 
-## Requirements
+This extension uses the Anwall LLM API for summarization. You'll need to:
+1. Obtain an API key from [Anwall](https://awanllm.com/)
+2. Enter it in the extension settings
+3. Your API key is stored locally and never shared
 
-- Firefox browser
-- An API key for the text summarization service (you'll need to add your own API key in the `background.js` file)
+## Privacy
 
-## Note
+- Your data is processed locally where possible
+- Content is sent to the AI service only for summarization
+- No user data is collected or stored beyond local browser storage
 
-This extension requires integration with a text summarization service. You'll need to:
+## Limitations
 
-1. Choose a text summarization service (e.g., OpenAI's API)
-2. Add your API key in the `background.js` file
-3. Update the API endpoint in the `summarizeText` function
+- PDF highlighting is limited to displaying important passages in the popup
+- Very long documents may be truncated for processing
+- Requires an internet connection for summarization
 
 ## License
 
-MIT License
+All Rights Reserved
+
+## Support
+
+For issues or feature requests, please submit them on our [GitHub repository](https://github.com/your-username/ai_highlighter)
