@@ -5,6 +5,39 @@ let contentState = {
   tabId: null
 };
 
+// Show API loading indicator
+function showApiLoadingIndicator(message = "Analyzing content...") {
+  const existingOverlay = document.querySelector('.api-loading-overlay');
+  if (existingOverlay) return existingOverlay;
+  
+  const overlay = document.createElement('div');
+  overlay.className = 'api-loading-overlay';
+  overlay.innerHTML = `
+    <div class="api-loading-spinner"></div>
+    <div class="api-loading-text">${message}</div>
+    <div class="api-loading-progress">
+      <div class="api-loading-progress-bar"></div>
+    </div>
+  `;
+  
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+// Hide API loading indicator
+function hideApiLoadingIndicator() {
+  const overlay = document.querySelector('.api-loading-overlay');
+  if (overlay) {
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.3s ease-out';
+    setTimeout(() => {
+      if (overlay.parentNode) {
+        overlay.parentNode.removeChild(overlay);
+      }
+    }, 300);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const summarizeButton = document.getElementById('summarize');
   const statusDiv = document.getElementById('status');
@@ -54,16 +87,24 @@ document.addEventListener('DOMContentLoaded', () => {
       // Handle different content types
       if (contentState.isPDF) {
         // For PDFs, fetch the content and extract text using PDF.js
+        showApiLoadingIndicator('Extracting PDF content...');
         contentText = await processPDFContent(contentState.url);
       } else {
         // For webpages, get the already extracted content
+        showApiLoadingIndicator('Getting webpage content...');
         contentText = await processWebpageContent();
       }
       
       console.log("[Popup] Content extracted, length:", contentText.length);
       
+      // Update loading message for summarization
+      showApiLoadingIndicator('Generating summary and highlights...');
+      
       // Summarize the content
       const analysisResult = await summarizeContent(contentText);
+      
+      // Hide loading indicator
+      hideApiLoadingIndicator();
       
       // Display the summary and highlights
       showStatus('Summary completed!', 'success');
@@ -76,6 +117,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
     } catch (error) {
       console.error('[Popup] Error:', error);
+      hideApiLoadingIndicator();
       showStatus('Failed to process content: ' + error.message, 'error');
     } finally {
       // Re-enable the button

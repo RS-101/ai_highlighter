@@ -15,8 +15,69 @@ function addHighlightStyles() {
       padding: 2px 0;
       border-radius: 2px;
     }
+    .ai-loading-overlay {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background-color: rgba(0, 96, 223, 0.9);
+      color: white;
+      padding: 12px 20px;
+      border-radius: 4px;
+      z-index: 10000;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+      display: flex;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      animation: ai-fade-in 0.3s ease-in-out;
+    }
+    .ai-loading-spinner {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: ai-spin 1s ease-in-out infinite;
+      margin-right: 10px;
+    }
+    @keyframes ai-spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes ai-fade-in {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   `;
   document.head.appendChild(style);
+}
+
+// Show loading indicator when API is being called
+function showLoadingIndicator() {
+  // Check if loading indicator already exists
+  if (document.querySelector('.ai-loading-overlay')) return;
+  
+  const loadingIndicator = document.createElement('div');
+  loadingIndicator.className = 'ai-loading-overlay';
+  loadingIndicator.innerHTML = `
+    <div class="ai-loading-spinner"></div>
+    <div>Processing page content...</div>
+  `;
+  document.body.appendChild(loadingIndicator);
+  
+  return loadingIndicator;
+}
+
+// Hide loading indicator
+function hideLoadingIndicator() {
+  const loadingIndicator = document.querySelector('.ai-loading-overlay');
+  if (loadingIndicator) {
+    loadingIndicator.style.animation = 'ai-fade-in 0.3s ease-in-out reverse';
+    setTimeout(() => {
+      if (loadingIndicator.parentNode) {
+        loadingIndicator.parentNode.removeChild(loadingIndicator);
+      }
+    }, 300);
+  }
 }
 
 // Initialize the extension
@@ -34,6 +95,9 @@ function initializeExtension() {
       window.pageContent = content;
       contentProcessed = true;
       
+      // Show loading indicator while API is being called
+      const loadingIndicator = showLoadingIndicator();
+      
       // Send the content to the background script for automatic processing
       return browser.runtime.sendMessage({
         type: "AUTO_PROCESS_CONTENT",
@@ -42,6 +106,9 @@ function initializeExtension() {
     })
     .then(response => {
       console.log("[Content] Auto-processing response:", response);
+      // Hide loading indicator
+      hideLoadingIndicator();
+      
       if (response && response.status === "success" && response.summary && response.summary.highlights) {
         // Apply highlights automatically
         return applyHighlights(response.summary.highlights);
@@ -49,6 +116,7 @@ function initializeExtension() {
     })
     .catch(error => {
       console.error("[Content] Error in auto-processing:", error);
+      hideLoadingIndicator();
     });
 }
 
