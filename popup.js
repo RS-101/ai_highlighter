@@ -1,3 +1,10 @@
+// Global state for content
+let contentState = {
+  url: null,
+  isPDF: false,
+  tabId: null
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   const summarizeButton = document.getElementById('summarize');
   const statusDiv = document.getElementById('status');
@@ -9,13 +16,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Disable the button initially
   summarizeButton.disabled = true;
   
-  // Current content state
-  let contentState = {
-    url: null,
-    isPDF: false,
-    tabId: null
-  };
-
   // Check what content is currently open
   browser.runtime.sendMessage({ type: "GET_CURRENT_CONTENT" })
     .then(response => {
