@@ -249,6 +249,9 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .then(() => {
           showStatus('Settings saved!', 'success');
+          // Ensure the status message is shown under the settings tab
+          const settingsTab = document.getElementById('settings-tab');
+          settingsTab.appendChild(statusDiv);
         })
         .catch(error => {
           console.error('[Popup] Error saving settings:', error);

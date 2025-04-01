@@ -326,7 +326,7 @@ async function summarizeText(text) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        "model": "Meta-Llama-3-8B-Instruct",
+        "model": "Meta-Llama-3.1-8B-Instruct",
         "messages": [
           {
             "role": "system", 
