@@ -64,11 +64,16 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log("[Popup] Content preview:", contentText.substring(0, 500) + "...");
       
       // Summarize the content
-      const summary = await summarizeContent(contentText);
+      const analysisResult = await summarizeContent(contentText);
       
-      // Display the summary
+      // Display the summary and highlights
       showStatus('Summary completed!', 'success');
-      displaySummary(summary);
+      displaySummaryAndHighlights(analysisResult, contentState.isPDF);
+      
+      // Apply highlights if it's a webpage
+      if (!contentState.isPDF) {
+        applyWebpageHighlights(analysisResult.highlights);
+      }
       
     } catch (error) {
       console.error('[Popup] Error:', error);
@@ -133,6 +138,24 @@ document.addEventListener('DOMContentLoaded', () => {
     
     return response.summary;
   }
+  
+  // Apply highlights to the webpage
+  function applyWebpageHighlights(highlights) {
+    if (!highlights || !highlights.length) {
+      console.log("[Popup] No highlights to apply");
+      return;
+    }
+    
+    // Send message to content script to apply highlights
+    browser.tabs.sendMessage(contentState.tabId, {
+      type: "APPLY_HIGHLIGHTS",
+      highlights: highlights
+    }).then(response => {
+      console.log("[Popup] Highlights applied:", response);
+    }).catch(error => {
+      console.error("[Popup] Error applying highlights:", error);
+    });
+  }
 });
 
 function showStatus(message, type) {
@@ -147,8 +170,8 @@ function showStatus(message, type) {
   }, 5000);
 }
 
-function displaySummary(summary) {
-  // Create a modal to display the summary
+function displaySummaryAndHighlights(analysis, isPDF) {
+  // Create a modal to display the summary and highlights
   const modal = document.createElement('div');
   modal.style.cssText = `
     position: fixed;
@@ -173,26 +196,78 @@ function displaySummary(summary) {
     overflow-y: auto;
   `;
   
+  // Create HTML for highlights
+  let highlightsHTML = '';
+  if (analysis.highlights && analysis.highlights.length) {
+    highlightsHTML = `
+      <h4>Key Highlights:</h4>
+      <ul style="padding-left: 20px;">
+        ${analysis.highlights.map(highlight => 
+          `<li style="margin-bottom: 8px; color: #0060df;">${highlight}</li>`
+        ).join('')}
+      </ul>
+    `;
+  }
+  
+  // Show PDF-specific message
+  let pdfMessage = '';
+  if (isPDF) {
+    pdfMessage = `
+      <div style="margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
+        <strong>Note:</strong> PDF highlighting is not available directly in the document. 
+        The key passages are listed above.
+      </div>
+    `;
+  }
+  
   content.innerHTML = `
     <h3>Content Summary</h3>
-    <p>${summary}</p>
-    <button id="close-summary" style="
-      padding: 8px 16px;
-      background-color: #0060df;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      margin-top: 15px;
-    ">Close</button>
+    <p style="line-height: 1.5;">${analysis.summary}</p>
+    
+    ${highlightsHTML}
+    ${pdfMessage}
+    
+    <div style="display: flex; justify-content: space-between; margin-top: 15px;">
+      <button id="close-summary" style="
+        padding: 8px 16px;
+        background-color: #0060df;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      ">Close</button>
+      
+      ${!isPDF ? `
+      <button id="toggle-highlights" style="
+        padding: 8px 16px;
+        background-color: #45a049;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      ">Toggle Highlights</button>
+      ` : ''}
+    </div>
   `;
   
   modal.appendChild(content);
   document.body.appendChild(modal);
   
+  // Add event listeners to buttons
   document.getElementById('close-summary').addEventListener('click', () => {
     modal.remove();
   });
+  
+  // Add toggle highlights button for webpages
+  if (!isPDF) {
+    document.getElementById('toggle-highlights').addEventListener('click', () => {
+      browser.tabs.sendMessage(contentState.tabId, {
+        type: "TOGGLE_HIGHLIGHTS"
+      }).catch(error => {
+        console.error("[Popup] Error toggling highlights:", error);
+      });
+    });
+  }
 }
 
 // Function to extract text from a PDF using PDF.js

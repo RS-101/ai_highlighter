@@ -139,11 +139,28 @@ async function summarizeText(text) {
         "messages": [
           {
             "role": "system", 
-            "content": "You are a helpful assistant that specializes in summarizing text. Provide concise, clear summaries that capture the main points and key information."
+            "content": "You are a helpful assistant that specializes in analyzing text. You'll provide: 1) A concise summary of the text, and 2) A list of important text segments to highlight. The highlights must be exact verbatim quotes from the original text."
           },
           {
             "role": "user", 
-            "content": `Please provide a concise summary of the following text:\n\n${text}`
+            "content": `Analyze the following text and provide two sections:
+1. SUMMARY: A concise summary that captures the main points.
+2. HIGHLIGHTS: A JSON array of exactly 5-7 important text segments to highlight. Each segment should be a direct quote from the original text (not paraphrased) and should be between 5-30 words.
+
+Format your response exactly like this:
+SUMMARY: [your summary here]
+
+HIGHLIGHTS: 
+[
+  "exact quote 1",
+  "exact quote 2",
+  "exact quote 3",
+  ...
+]
+
+Here's the text to analyze:
+
+${text}`
           }
         ],
         "repetition_penalty": 1.1,
@@ -167,7 +184,35 @@ async function summarizeText(text) {
     console.log("[Background] API Response data:", data);
     
     if (data.choices && data.choices[0] && data.choices[0].message) {
-      return data.choices[0].message.content;
+      const content = data.choices[0].message.content;
+      
+      // Extract summary and highlights from the response
+      const summaryMatch = content.match(/SUMMARY:\s*(.*?)(?=\n\n)/s);
+      const highlightsMatch = content.match(/HIGHLIGHTS:\s*\[([\s\S]*?)\]/);
+      
+      const summary = summaryMatch ? summaryMatch[1].trim() : "No summary available";
+      
+      let highlights = [];
+      if (highlightsMatch && highlightsMatch[1]) {
+        try {
+          // Try to parse the highlights as JSON
+          highlights = JSON.parse(`[${highlightsMatch[1]}]`);
+        } catch (e) {
+          // If JSON parsing fails, try to extract quotes using regex
+          const quoteMatches = highlightsMatch[1].match(/"([^"]*)"/g);
+          if (quoteMatches) {
+            highlights = quoteMatches.map(quote => quote.replace(/^"|"$/g, ''));
+          }
+        }
+      }
+      
+      console.log("[Background] Extracted summary:", summary);
+      console.log("[Background] Extracted highlights:", highlights);
+      
+      return {
+        summary,
+        highlights
+      };
     } else {
       console.error("[Background] Unexpected API response format:", data);
       throw new Error('Unexpected API response format');

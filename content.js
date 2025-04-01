@@ -1,5 +1,10 @@
 console.log("[Content] Content script loaded on:", window.location.href);
 
+// Variables to store highlights
+let highlights = [];
+let highlightsApplied = false;
+let highlightedElements = [];
+
 // Listen for messages from the background script or popup
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('[Content] Received message:', message);
@@ -14,6 +19,44 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     } catch (error) {
       console.error('[Content] Error extracting content:', error);
+      sendResponse({ 
+        status: "error", 
+        message: error.message 
+      });
+    }
+  }
+  
+  if (message.type === "APPLY_HIGHLIGHTS") {
+    try {
+      highlights = message.highlights || [];
+      applyHighlights();
+      sendResponse({ 
+        status: "success", 
+        highlightsApplied: true,
+        count: highlights.length
+      });
+    } catch (error) {
+      console.error('[Content] Error applying highlights:', error);
+      sendResponse({ 
+        status: "error", 
+        message: error.message 
+      });
+    }
+  }
+  
+  if (message.type === "TOGGLE_HIGHLIGHTS") {
+    try {
+      if (highlightsApplied) {
+        removeHighlights();
+      } else {
+        applyHighlights();
+      }
+      sendResponse({ 
+        status: "success", 
+        highlightsApplied: highlightsApplied
+      });
+    } catch (error) {
+      console.error('[Content] Error toggling highlights:', error);
       sendResponse({ 
         status: "error", 
         message: error.message 
@@ -95,4 +138,125 @@ function extractPageContent() {
     console.error('[Content] Error during extraction:', error);
     throw new Error('Failed to extract webpage content: ' + error.message);
   }
+}
+
+// Function to apply highlights to the webpage
+function applyHighlights() {
+  if (!highlights || !highlights.length) {
+    console.log('[Content] No highlights to apply');
+    return;
+  }
+  
+  console.log('[Content] Applying highlights:', highlights);
+  
+  // Remove any existing highlights first
+  removeHighlights();
+  
+  // For each highlight, find and wrap matching text
+  highlights.forEach((highlightText, index) => {
+    // Use recursion to find all instances
+    findAndHighlightText(document.body, highlightText, index);
+  });
+  
+  // Show a notification that highlights were applied
+  showHighlightNotification(highlights.length);
+  
+  highlightsApplied = true;
+}
+
+// Function to find and highlight text in the DOM
+function findAndHighlightText(element, searchText, index) {
+  if (!element) return;
+  
+  // Skip script and style elements
+  if (element.tagName === 'SCRIPT' || element.tagName === 'STYLE' || 
+      element.tagName === 'NOSCRIPT' || element.className === 'ai-highlight') {
+    return;
+  }
+  
+  // Check if this element only contains text
+  if (element.childNodes.length === 1 && element.childNodes[0].nodeType === Node.TEXT_NODE) {
+    const text = element.textContent;
+    if (text.includes(searchText)) {
+      // Found the text, wrap it in a highlighted span
+      const regex = new RegExp(escapeRegExp(searchText), 'g');
+      element.innerHTML = element.innerHTML.replace(regex, 
+        `<mark class="ai-highlight ai-highlight-${index}" style="background-color: #ffff99; padding: 2px; border-radius: 2px;">$&</mark>`
+      );
+      
+      // Track this element
+      highlightedElements.push(element);
+      return;
+    }
+  }
+  
+  // Recurse through child elements
+  Array.from(element.childNodes).forEach(child => {
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      findAndHighlightText(child, searchText, index);
+    }
+  });
+}
+
+// Function to remove highlights
+function removeHighlights() {
+  console.log('[Content] Removing highlights');
+  
+  // Find all highlight elements and remove them
+  const highlights = document.querySelectorAll('.ai-highlight');
+  highlights.forEach(highlight => {
+    const parent = highlight.parentNode;
+    if (parent) {
+      parent.replaceChild(document.createTextNode(highlight.textContent), highlight);
+      parent.normalize();
+    }
+  });
+  
+  // Handle elements we modified
+  highlightedElements.forEach(element => {
+    // Remove any remaining highlights with a proper DOM replacement
+    const highlightMarks = element.querySelectorAll('.ai-highlight');
+    if (highlightMarks.length > 0) {
+      highlightMarks.forEach(mark => {
+        mark.outerHTML = mark.innerHTML;
+      });
+    }
+  });
+  
+  // Reset the tracking arrays
+  highlightedElements = [];
+  highlightsApplied = false;
+}
+
+// Show a notification about highlights
+function showHighlightNotification(count) {
+  const notification = document.createElement('div');
+  notification.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #0060df;
+    color: white;
+    padding: 10px 15px;
+    border-radius: 4px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    z-index: 10000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  `;
+  notification.textContent = `${count} important passages highlighted`;
+  
+  document.body.appendChild(notification);
+  
+  // Remove after 5 seconds
+  setTimeout(() => {
+    if (notification.parentNode) {
+      notification.parentNode.removeChild(notification);
+    }
+  }, 5000);
+}
+
+// Helper function to escape special characters in a string for use in a regular expression
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 } 
