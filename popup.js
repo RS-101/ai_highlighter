@@ -170,7 +170,36 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("[Popup] PDF data received:", pdfArrayBuffer.byteLength, "bytes");
     
     // Extract text from PDF
-    return extractTextFromPdf(pdfArrayBuffer);
+    const fullText = await extractTextFromPdf(pdfArrayBuffer);
+    
+    // Limit text to 2300 characters
+    return limitContentSize(fullText, 2300);
+  }
+  
+  // Function to limit content size while preserving complete sentences
+  function limitContentSize(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    
+    // Find a good cutoff point (end of sentence) near the maxLength
+    let cutoff = maxLength;
+    
+    // Look for sentence endings (.!?) near the maxLength
+    const sentenceEndRegex = /[.!?]\s+/g;
+    let match;
+    let lastGoodCutoff = 0;
+    
+    while ((match = sentenceEndRegex.exec(text)) !== null) {
+      if (match.index > maxLength) break;
+      lastGoodCutoff = match.index + match[0].length - 1;
+    }
+    
+    // If we found a good sentence ending, use that, otherwise just cut at maxLength
+    cutoff = lastGoodCutoff > 0 ? lastGoodCutoff + 1 : maxLength;
+    
+    const limitedContent = text.substring(0, cutoff);
+    console.log(`[Popup] Limited content from ${text.length} to ${limitedContent.length} characters`);
+    
+    return limitedContent;
   }
   
   // Process webpage content using content script
@@ -190,9 +219,12 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Summarize content using the background script
   async function summarizeContent(text) {
+    // Ensure content is limited to 2300 characters
+    const limitedText = limitContentSize(text, 2300);
+    
     const response = await browser.runtime.sendMessage({
       type: "SUMMARIZE_CONTENT",
-      text: text,
+      text: limitedText,
       url: contentState.url // Include the current URL for caching
     });
     

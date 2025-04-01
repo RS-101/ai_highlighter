@@ -91,17 +91,21 @@ function initializeExtension() {
   extractPageContent()
     .then(content => {
       console.log("[Content] Content extracted, length:", content.length);
-      // Store the content for later use
+      // Store the full content for later use
       window.pageContent = content;
       contentProcessed = true;
       
       // Show loading indicator while API is being called
       const loadingIndicator = showLoadingIndicator();
       
+      // Limit content to 2300 characters for the API
+      const limitedContent = limitContentSize(content, 2300);
+      console.log("[Content] Limited content for API, new length:", limitedContent.length);
+      
       // Send the content to the background script for automatic processing
       return browser.runtime.sendMessage({
         type: "AUTO_PROCESS_CONTENT",
-        content: content,
+        content: limitedContent,
         url: window.location.href,
         pageTitle: document.title
       });
@@ -120,6 +124,32 @@ function initializeExtension() {
       console.error("[Content] Error in auto-processing:", error);
       hideLoadingIndicator();
     });
+}
+
+// Function to limit content size while preserving complete sentences
+function limitContentSize(text, maxLength) {
+  if (text.length <= maxLength) return text;
+  
+  // Find a good cutoff point (end of sentence) near the maxLength
+  let cutoff = maxLength;
+  
+  // Look for sentence endings (.!?) near the maxLength
+  const sentenceEndRegex = /[.!?]\s+/g;
+  let match;
+  let lastGoodCutoff = 0;
+  
+  while ((match = sentenceEndRegex.exec(text)) !== null) {
+    if (match.index > maxLength) break;
+    lastGoodCutoff = match.index + match[0].length - 1;
+  }
+  
+  // If we found a good sentence ending, use that, otherwise just cut at maxLength
+  cutoff = lastGoodCutoff > 0 ? lastGoodCutoff + 1 : maxLength;
+  
+  const limitedContent = text.substring(0, cutoff);
+  console.log(`[Content] Limited content from ${text.length} to ${limitedContent.length} characters`);
+  
+  return limitedContent;
 }
 
 // Initialize as soon as possible based on document readiness
@@ -141,17 +171,25 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case "EXTRACT_WEBPAGE_CONTENT":
       // Return the stored content if available, otherwise extract it
       if (window.pageContent) {
+        // Limit content to 2300 characters
+        const limitedContent = limitContentSize(window.pageContent, 2300);
+        
         sendResponse({
           status: "success",
-          content: window.pageContent
+          content: limitedContent
         });
       } else {
         extractPageContent()
           .then(content => {
+            // Store full content
             window.pageContent = content;
+            
+            // Limit to 2300 characters
+            const limitedContent = limitContentSize(content, 2300);
+            
             sendResponse({
               status: "success",
-              content: content
+              content: limitedContent
             });
           })
           .catch(error => {

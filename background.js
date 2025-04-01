@@ -223,6 +223,10 @@ async function summarizeText(text) {
   const AWANLLM_API_KEY = 'd75d2637-5931-4cac-910b-8ad89b33e4a3';
   
   try {
+    // Ensure text is limited to 2300 characters
+    const limitedText = limitContentSize(text, 2300);
+    console.log(`[Background] Text length for API: ${limitedText.length} characters`);
+    
     console.log("[Background] Sending request to AwanLLM API...");
     const response = await fetch("https://api.awanllm.com/v1/chat/completions", {
       method: "POST",
@@ -256,7 +260,7 @@ HIGHLIGHTS:
 
 Here's the text to analyze:
 
-${text}`
+${limitedText}`
           }
         ],
         "repetition_penalty": 1.1,
@@ -317,4 +321,30 @@ ${text}`
     console.error("[Background] Error in summarization:", error);
     throw error;
   }
+}
+
+// Function to limit content size while preserving complete sentences
+function limitContentSize(text, maxLength) {
+  if (!text || text.length <= maxLength) return text;
+  
+  // Find a good cutoff point (end of sentence) near the maxLength
+  let cutoff = maxLength;
+  
+  // Look for sentence endings (.!?) near the maxLength
+  const sentenceEndRegex = /[.!?]\s+/g;
+  let match;
+  let lastGoodCutoff = 0;
+  
+  while ((match = sentenceEndRegex.exec(text)) !== null) {
+    if (match.index > maxLength) break;
+    lastGoodCutoff = match.index + match[0].length - 1;
+  }
+  
+  // If we found a good sentence ending, use that, otherwise just cut at maxLength
+  cutoff = lastGoodCutoff > 0 ? lastGoodCutoff + 1 : maxLength;
+  
+  const limitedContent = text.substring(0, cutoff);
+  console.log(`[Background] Limited content from ${text.length} to ${limitedContent.length} characters`);
+  
+  return limitedContent;
 } 
