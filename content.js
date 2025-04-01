@@ -87,52 +87,89 @@ function initializeExtension() {
   console.log("[Content] Initializing extension...");
   addHighlightStyles();
   
-  // Extract content immediately and send to background for processing
-  extractPageContent()
-    .then(content => {
-      console.log("[Content] Content extracted, length:", content.length);
-      // Store the full content for later use
-      window.pageContent = content;
-      contentProcessed = true;
-      
-      // Show loading indicator while API is being called
-      const loadingIndicator = showLoadingIndicator();
-      
-      // Limit content to 2300 characters for the API
-      const limitedContent = limitContentSize(content, 2300);
-      console.log("[Content] Limited content for API, new length:", limitedContent.length);
-      
-      // Send the content to the background script for automatic processing
-      return browser.runtime.sendMessage({
-        type: "AUTO_PROCESS_CONTENT",
-        content: limitedContent,
-        url: window.location.href,
-        pageTitle: document.title
-      });
-    })
-    .then(response => {
-      console.log("[Content] Auto-processing response:", response);
-      // Hide loading indicator
-      hideLoadingIndicator();
-      
-      if (response && response.status === "success" && response.summary && response.summary.highlights) {
-        // Store highlights for later reuse
-        highlights = response.summary.highlights;
-        
-        // Apply highlights immediately
-        return applyHighlights(response.summary.highlights).then(() => {
-          // Apply highlights again after a short delay to catch any late-loading content
-          setTimeout(() => {
-            console.log("[Content] Re-applying highlights to ensure complete coverage");
-            applyHighlights(response.summary.highlights, false);
-          }, 1500);
+  // First check if this site should be auto-summarized
+  browser.runtime.sendMessage({
+    type: "CHECK_AUTO_SUMMARIZE",
+    url: window.location.href
+  }).then(response => {
+    console.log("[Content] Auto-summarize check response:", response);
+    
+    // Only proceed with auto-summarization if enabled for this site
+    if (response && response.status === "success" && response.shouldAutoSummarize) {
+      // Extract content immediately and send to background for processing
+      extractPageContent()
+        .then(content => {
+          console.log("[Content] Content extracted, length:", content.length);
+          // Store the full content for later use
+          window.pageContent = content;
+          contentProcessed = true;
+          
+          // Show loading indicator while API is being called
+          const loadingIndicator = showLoadingIndicator();
+          
+          // Limit content to 2300 characters for the API
+          const limitedContent = limitContentSize(content, 2300);
+          console.log("[Content] Limited content for API, new length:", limitedContent.length);
+          
+          // Send the content to the background script for automatic processing
+          return browser.runtime.sendMessage({
+            type: "AUTO_PROCESS_CONTENT",
+            content: limitedContent,
+            url: window.location.href,
+            pageTitle: document.title
+          });
+        })
+        .then(response => {
+          console.log("[Content] Auto-processing response:", response);
+          // Hide loading indicator
+          hideLoadingIndicator();
+          
+          // Only apply highlights if the response was successful
+          if (response && response.status === "success" && response.summary && response.summary.highlights) {
+            // Store highlights for later reuse
+            highlights = response.summary.highlights;
+            
+            // Apply highlights immediately
+            return applyHighlights(response.summary.highlights).then(() => {
+              // Apply highlights again after a short delay to catch any late-loading content
+              setTimeout(() => {
+                console.log("[Content] Re-applying highlights to ensure complete coverage");
+                applyHighlights(response.summary.highlights, false);
+              }, 1500);
+            });
+          } else if (response && response.status === "skip") {
+            console.log("[Content] Auto-summarization skipped:", response.message);
+          }
+        })
+        .catch(error => {
+          console.error("[Content] Error in auto-processing:", error);
+          hideLoadingIndicator();
         });
-      }
-    })
-    .catch(error => {
-      console.error("[Content] Error in auto-processing:", error);
-      hideLoadingIndicator();
-    });
+    } else {
+      console.log("[Content] Auto-summarization not enabled for this site");
+      // Still extract and store the content for manual summarization
+      extractPageContent()
+        .then(content => {
+          window.pageContent = content;
+          contentProcessed = true;
+          console.log("[Content] Content extracted and stored for manual summarization");
+        })
+        .catch(error => {
+          console.error("[Content] Error extracting content:", error);
+        });
+    }
+  }).catch(error => {
+    console.error("[Content] Error checking auto-summarize settings:", error);
+    // Continue with content extraction for manual summarization
+    extractPageContent()
+      .then(content => {
+        window.pageContent = content;
+        contentProcessed = true;
+      })
+      .catch(error => {
+        console.error("[Content] Error extracting content:", error);
+      });
+  });
 }
 
 // Function to limit content size while preserving complete sentences

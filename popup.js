@@ -41,10 +41,29 @@ function hideApiLoadingIndicator() {
 document.addEventListener('DOMContentLoaded', () => {
   const summarizeButton = document.getElementById('summarize');
   const statusDiv = document.getElementById('status');
+  const tabs = document.querySelectorAll('.tab');
+  const tabContents = document.querySelectorAll('.tab-content');
 
   // Set up PDF.js worker for PDF processing
   const pdfjsLib = window.pdfjsLib;
   pdfjsLib.GlobalWorkerOptions.workerSrc = '../lib/pdf.worker.min.js';
+
+  // Initialize settings
+  initializeSettings();
+
+  // Tab switching functionality
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      // Remove active class from all tabs and contents
+      tabs.forEach(t => t.classList.remove('active'));
+      tabContents.forEach(c => c.classList.remove('active'));
+      
+      // Add active class to clicked tab and corresponding content
+      tab.classList.add('active');
+      const tabId = tab.getAttribute('data-tab');
+      document.getElementById(`${tabId}-tab`).classList.add('active');
+    });
+  });
 
   // Disable the button initially
   summarizeButton.disabled = true;
@@ -150,6 +169,149 @@ document.addEventListener('DOMContentLoaded', () => {
         "Summarize PDF" : "Summarize Page";
     }
   });
+  
+  // Initialize settings UI
+  function initializeSettings() {
+    const autoSummarizeToggle = document.getElementById('auto-summarize-toggle');
+    const siteList = document.getElementById('site-list');
+    const newSiteInput = document.getElementById('new-site');
+    const addSiteButton = document.getElementById('add-site');
+    const saveSettingsButton = document.getElementById('save-settings');
+    
+    // Load current settings
+    browser.runtime.sendMessage({ type: "GET_SETTINGS" })
+      .then(response => {
+        if (response && response.status === "success" && response.settings) {
+          const settings = response.settings;
+          
+          // Set toggle state
+          autoSummarizeToggle.checked = settings.autoSummarizeEnabled;
+          
+          // Populate site list
+          renderSiteList(settings.autoSummarizeSites);
+        }
+      })
+      .catch(error => {
+        console.error('[Popup] Error loading settings:', error);
+        showStatus('Error loading settings: ' + error.message, 'error');
+      });
+    
+    // Add new site
+    addSiteButton.addEventListener('click', () => {
+      const site = newSiteInput.value.trim();
+      if (site) {
+        // Get current settings
+        browser.runtime.sendMessage({ type: "GET_SETTINGS" })
+          .then(response => {
+            if (response && response.status === "success" && response.settings) {
+              const settings = response.settings;
+              
+              // Add the new site if it's not already in the list
+              if (!settings.autoSummarizeSites.includes(site)) {
+                settings.autoSummarizeSites.push(site);
+                
+                // Update the UI
+                renderSiteList(settings.autoSummarizeSites);
+                
+                // Save the settings
+                browser.runtime.sendMessage({
+                  type: "SAVE_SETTINGS",
+                  settings: settings
+                });
+                
+                // Clear the input
+                newSiteInput.value = '';
+              } else {
+                showStatus('Site already in list', 'error');
+              }
+            }
+          });
+      }
+    });
+    
+    // Save settings
+    saveSettingsButton.addEventListener('click', () => {
+      // Get current settings
+      browser.runtime.sendMessage({ type: "GET_SETTINGS" })
+        .then(response => {
+          if (response && response.status === "success" && response.settings) {
+            const settings = response.settings;
+            
+            // Update enabled state
+            settings.autoSummarizeEnabled = autoSummarizeToggle.checked;
+            
+            // Save the settings
+            return browser.runtime.sendMessage({
+              type: "SAVE_SETTINGS",
+              settings: settings
+            });
+          }
+        })
+        .then(() => {
+          showStatus('Settings saved!', 'success');
+        })
+        .catch(error => {
+          console.error('[Popup] Error saving settings:', error);
+          showStatus('Error saving settings: ' + error.message, 'error');
+        });
+    });
+    
+    // Render the site list
+    function renderSiteList(sites) {
+      siteList.innerHTML = '';
+      
+      if (sites.length === 0) {
+        const emptyMessage = document.createElement('div');
+        emptyMessage.textContent = 'No sites added yet. Add domains below.';
+        emptyMessage.style.color = '#777';
+        emptyMessage.style.fontStyle = 'italic';
+        siteList.appendChild(emptyMessage);
+      } else {
+        sites.forEach(site => {
+          const siteItem = document.createElement('div');
+          siteItem.className = 'site-item';
+          
+          const siteName = document.createElement('span');
+          siteName.textContent = site;
+          
+          const removeButton = document.createElement('button');
+          removeButton.className = 'remove-site';
+          removeButton.textContent = 'Remove';
+          removeButton.addEventListener('click', () => removeSite(site));
+          
+          siteItem.appendChild(siteName);
+          siteItem.appendChild(removeButton);
+          siteList.appendChild(siteItem);
+        });
+      }
+    }
+    
+    // Remove a site
+    function removeSite(site) {
+      browser.runtime.sendMessage({ type: "GET_SETTINGS" })
+        .then(response => {
+          if (response && response.status === "success" && response.settings) {
+            const settings = response.settings;
+            
+            // Remove the site
+            settings.autoSummarizeSites = settings.autoSummarizeSites.filter(s => s !== site);
+            
+            // Update the UI
+            renderSiteList(settings.autoSummarizeSites);
+            
+            // Save the settings
+            return browser.runtime.sendMessage({
+              type: "SAVE_SETTINGS",
+              settings: settings
+            });
+          }
+        })
+        .catch(error => {
+          console.error('[Popup] Error removing site:', error);
+          showStatus('Error removing site: ' + error.message, 'error');
+        });
+    }
+  }
   
   // Process PDF content using PDF.js
   async function processPDFContent(url) {

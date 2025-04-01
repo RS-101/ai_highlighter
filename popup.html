@@ -136,6 +136,98 @@
       padding: 4px 8px;
       margin-left: 8px;
     }
+    
+    /* Tabs styling */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 15px;
+    }
+    
+    .tab {
+      padding: 8px 15px;
+      cursor: pointer;
+      background-color: #f1f1f1;
+      border: 1px solid #ddd;
+      border-bottom: none;
+      margin-right: 5px;
+      border-radius: 4px 4px 0 0;
+    }
+    
+    .tab.active {
+      background-color: white;
+      border-bottom: 1px solid white;
+      margin-bottom: -1px;
+      font-weight: bold;
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    /* Settings form styling */
+    .settings-form {
+      margin-top: 10px;
+    }
+    
+    .settings-section {
+      margin-bottom: 15px;
+    }
+    
+    .site-list {
+      max-height: 150px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    
+    .site-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid #eee;
+    }
+    
+    .site-item:last-child {
+      border-bottom: none;
+    }
+    
+    .site-input {
+      display: flex;
+      margin-top: 10px;
+    }
+    
+    .site-input input {
+      flex-grow: 1;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px 0 0 4px;
+    }
+    
+    .site-input button {
+      border-radius: 0 4px 4px 0;
+    }
+    
+    .remove-site {
+      background-color: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    
+    .remove-site:hover {
+      background-color: #cc0000;
+    }
   </style>
   <!-- Load PDF.js library -->
   <script src="../lib/pdf.min.js"></script>
@@ -155,12 +247,48 @@
   </script>
 </head>
 <body>
-  <div class="container" id="main-container">
-    <h2>Content Summarizer</h2>
-    <p>This extension summarizes webpages and PDF files, highlighting key passages for easier reading.</p>
-    <button id="summarize">Summarize Content</button>
-    <div id="status" class="status"></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="main">Summarize</div>
+    <div class="tab" data-tab="settings">Settings</div>
   </div>
+  
+  <div id="main-tab" class="tab-content active">
+    <div class="container" id="main-container">
+      <h2>Content Summarizer</h2>
+      <p>This extension summarizes webpages and PDF files, highlighting key passages for easier reading.</p>
+      <button id="summarize">Summarize Content</button>
+      <div id="status" class="status"></div>
+    </div>
+  </div>
+  
+  <div id="settings-tab" class="tab-content">
+    <div class="container">
+      <h2>Auto-Summarization Settings</h2>
+      <p>Specify which sites should be automatically summarized when loaded.</p>
+      
+      <div class="settings-section">
+        <label for="auto-summarize-toggle">
+          <input type="checkbox" id="auto-summarize-toggle"> 
+          Enable automatic summarization
+        </label>
+      </div>
+      
+      <div class="settings-section">
+        <h4>Auto-Summarize Sites:</h4>
+        <div class="site-list" id="site-list">
+          <!-- Site items will be added here dynamically -->
+        </div>
+        
+        <div class="site-input">
+          <input type="text" id="new-site" placeholder="Enter domain (e.g., example.com)">
+          <button id="add-site">Add</button>
+        </div>
+      </div>
+      
+      <button id="save-settings">Save Settings</button>
+    </div>
+  </div>
+  
   <div id="content-container"></div>
   <script src="popup.js"></script>
 </body>

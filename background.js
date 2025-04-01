@@ -14,6 +14,58 @@ let currentState = {
   timestamp: null  // Track when the summary was generated
 };
 
+// Extension settings with defaults
+let settings = {
+  autoSummarizeEnabled: false,
+  autoSummarizeSites: []  // List of domains to auto-summarize
+};
+
+// Load settings when extension starts
+loadSettings();
+
+// Function to load settings from storage
+function loadSettings() {
+  browser.storage.local.get('settings').then(result => {
+    if (result.settings) {
+      settings = result.settings;
+      console.log("[Background] Loaded settings:", settings);
+    } else {
+      // Initialize with default settings if none exist
+      saveSettings();
+    }
+  }).catch(error => {
+    console.error("[Background] Error loading settings:", error);
+  });
+}
+
+// Save settings to storage
+function saveSettings() {
+  browser.storage.local.set({ settings }).then(() => {
+    console.log("[Background] Settings saved:", settings);
+  }).catch(error => {
+    console.error("[Background] Error saving settings:", error);
+  });
+}
+
+// Check if the given URL's domain matches any in the auto-summarize list
+function shouldAutoSummarize(url) {
+  if (!settings.autoSummarizeEnabled) return false;
+  if (!url) return false;
+  
+  try {
+    const urlObj = new URL(url);
+    const domain = urlObj.hostname;
+    
+    return settings.autoSummarizeSites.some(site => {
+      // Check if domain matches exactly or is a subdomain
+      return domain === site || domain.endsWith('.' + site);
+    });
+  } catch (e) {
+    console.error("[Background] Error parsing URL:", e);
+    return false;
+  }
+}
+
 // Listen for web navigation events
 browser.webNavigation.onCompleted.addListener((details) => {
   console.log("[Background] Navigation completed:", details);
@@ -40,6 +92,12 @@ browser.webNavigation.onCompleted.addListener((details) => {
     console.log("[Background] Regular webpage detected:", details.url);
     currentState.isPDF = false;
     currentState.pdfBlob = null;
+    
+    // Check if this site should be auto-summarized
+    if (shouldAutoSummarize(details.url)) {
+      console.log("[Background] Auto-summarize enabled for this site:", details.url);
+      // We'll let the content script know this site should be auto-summarized
+    }
   }
 });
 
@@ -79,6 +137,9 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const isPDF = tab.url.toLowerCase().endsWith('.pdf') || 
                        tab.url.startsWith('file://') && tab.url.toLowerCase().endsWith('.pdf');
           
+          // Check if auto-summarize is enabled for this site
+          const shouldAuto = shouldAutoSummarize(tab.url);
+          
           // Include any cached summary data
           return {
             status: "success",
@@ -88,7 +149,8 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             hasCachedSummary: !!(currentState.summary && currentState.url === tab.url),
             summary: currentState.summary,
             highlights: currentState.highlights,
-            timestamp: currentState.timestamp
+            timestamp: currentState.timestamp,
+            shouldAutoSummarize: shouldAuto
           };
         });
         
@@ -129,8 +191,24 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log("[Background] browserAction.setPopup not available");
         return Promise.resolve({ status: "error", message: "browserAction.setPopup not available" });
       }
+    
+    case "CHECK_AUTO_SUMMARIZE":
+      // Check if current URL should be auto-summarized
+      return Promise.resolve({
+        status: "success",
+        shouldAutoSummarize: shouldAutoSummarize(message.url)
+      });
         
     case "AUTO_PROCESS_CONTENT":
+      // Check if this site should be auto-summarized
+      if (!shouldAutoSummarize(message.url)) {
+        console.log("[Background] Auto-summarize disabled for this site:", message.url);
+        return Promise.resolve({
+          status: "skip",
+          message: "Auto-summarize not enabled for this site"
+        });
+      }
+      
       // Automatically process content when page loads
       console.log("[Background] Auto-processing webpage content");
       return summarizeText(message.content)
@@ -206,6 +284,19 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
             message: error.message
           };
         });
+        
+    case "GET_SETTINGS":
+      // Return current settings
+      return Promise.resolve({
+        status: "success", 
+        settings: settings
+      });
+      
+    case "SAVE_SETTINGS":
+      // Update settings
+      settings = message.settings;
+      saveSettings();
+      return Promise.resolve({ status: "success" });
         
     case "PDF_CONTENT":
       // Handle PDF content from content script
