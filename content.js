@@ -116,8 +116,17 @@ function initializeExtension() {
       hideLoadingIndicator();
       
       if (response && response.status === "success" && response.summary && response.summary.highlights) {
-        // Apply highlights automatically
-        return applyHighlights(response.summary.highlights);
+        // Store highlights for later reuse
+        highlights = response.summary.highlights;
+        
+        // Apply highlights immediately
+        return applyHighlights(response.summary.highlights).then(() => {
+          // Apply highlights again after a short delay to catch any late-loading content
+          setTimeout(() => {
+            console.log("[Content] Re-applying highlights to ensure complete coverage");
+            applyHighlights(response.summary.highlights, false);
+          }, 1500);
+        });
       }
     })
     .catch(error => {
@@ -204,8 +213,9 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       break;
       
     case "APPLY_HIGHLIGHTS":
-      // Apply new highlights
-      applyHighlights(message.highlights).then(response => {
+      // Apply new highlights, respecting the showNotification parameter
+      const showNotification = message.showNotification !== false; // Default to true if not specified
+      applyHighlights(message.highlights, showNotification).then(response => {
         sendResponse(response);
       }).catch(error => {
         console.error("[Content] Error applying highlights:", error);
@@ -302,7 +312,7 @@ async function extractPageContent() {
 }
 
 // Function to apply highlights to the webpage
-function applyHighlights(newHighlights) {
+function applyHighlights(newHighlights, showNotification = true) {
   if (!newHighlights || !newHighlights.length) {
     console.log('[Content] No highlights to apply');
     return Promise.resolve({
@@ -328,8 +338,10 @@ function applyHighlights(newHighlights) {
   // Use a better approach to find and highlight text
   findAndHighlightInPage(processedHighlights);
   
-  // Show a notification that highlights were applied
-  showHighlightNotification(newHighlights.length);
+  // Show a notification that highlights were applied, only if requested
+  if (showNotification) {
+    showHighlightNotification(newHighlights.length);
+  }
   
   highlights = newHighlights;
   highlightsApplied = true;

@@ -250,6 +250,18 @@ document.addEventListener('DOMContentLoaded', () => {
       highlights: highlights
     }).then(response => {
       console.log("[Popup] Highlights applied:", response);
+      
+      // Apply highlights again after a short delay to ensure complete coverage
+      setTimeout(() => {
+        console.log("[Popup] Re-applying highlights to ensure complete coverage");
+        browser.tabs.sendMessage(contentState.tabId, {
+          type: "APPLY_HIGHLIGHTS",
+          highlights: highlights,
+          showNotification: false
+        }).catch(error => {
+          console.error("[Popup] Error during second highlight application:", error);
+        });
+      }, 1500);
     }).catch(error => {
       console.error("[Popup] Error applying highlights:", error);
     });
