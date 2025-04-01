@@ -132,11 +132,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log("[Popup] Summarization response:", response);
     
-    if (!response || response.status !== "success") {
+    if (!response || response.status !== "success" || !response.summary) {
       throw new Error(response?.message || "Failed to summarize content");
     }
     
-    return response.summary;
+    // Ensure we have the right format for analysis results
+    return {
+      summary: response.summary.summary,
+      highlights: response.summary.highlights || []
+    };
   }
   
   // Apply highlights to the webpage

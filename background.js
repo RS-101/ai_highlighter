@@ -105,11 +105,12 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("[Background] Text length:", textToSummarize.length);
     
     summarizeText(textToSummarize)
-      .then(summary => {
+      .then(result => {
         console.log("[Background] Summarization successful");
+        // Make sure we're returning both summary and highlights in the expected format
         sendResponse({ 
           status: "success", 
-          summary: summary 
+          summary: result // This already contains {summary, highlights}
         });
       })
       .catch(error => {
