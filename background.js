@@ -3,23 +3,38 @@ console.log("[Background] Browser API available:", !!browser);
 console.log("[Background] Downloads API available:", !!(browser && browser.downloads));
 console.log("[Background] Runtime API available:", !!(browser && browser.runtime));
 
-// Store the current PDF URL and content
-let currentPDFUrl = null;
-let currentPDFBlob = null;
+// Store the current content information
+let currentState = {
+  url: null,
+  isPDF: false,
+  pdfBlob: null,
+  tabId: null
+};
 
 // Listen for web navigation events
 browser.webNavigation.onCompleted.addListener((details) => {
   console.log("[Background] Navigation completed:", details);
   
+  // Only consider main frame navigations (not iframes)
+  if (details.frameId !== 0) return;
+  
+  // Store the tab ID
+  currentState.tabId = details.tabId;
+  currentState.url = details.url;
+  
   // Check if the URL ends with .pdf
   if (details.url && details.url.toLowerCase().endsWith('.pdf')) {
     console.log("[Background] PDF detected:", details.url);
-    currentPDFUrl = details.url;
+    currentState.isPDF = true;
     
     // Try to fetch the PDF content
     fetchPDFContent(details.url).catch(error => {
       console.error("[Background] Error fetching PDF content:", error);
     });
+  } else {
+    console.log("[Background] Regular webpage detected:", details.url);
+    currentState.isPDF = false;
+    currentState.pdfBlob = null;
   }
 });
 
@@ -32,8 +47,8 @@ async function fetchPDFContent(url) {
     console.log("[Background] PDF blob received:", blob.size, "bytes");
     
     // Store the blob for later use
-    currentPDFBlob = blob;
-    currentPDFUrl = url;
+    currentState.pdfBlob = blob;
+    currentState.url = url;
     
     return blob;
   } catch (error) {
@@ -42,27 +57,50 @@ async function fetchPDFContent(url) {
   }
 }
 
-// Listen for messages from popup
+// Listen for messages from popup or content script
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("[Background] Received message:", message);
   
-  if (message.type === "GET_PDF_CONTENT") {
-    if (currentPDFUrl) {
-      console.log("[Background] Returning PDF URL:", currentPDFUrl);
+  if (message.type === "GET_CURRENT_CONTENT") {
+    if (currentState.url) {
+      console.log("[Background] Returning current state:", currentState);
       sendResponse({ 
         status: "success", 
-        url: currentPDFUrl,
-        hasBlob: !!currentPDFBlob
+        url: currentState.url,
+        isPDF: currentState.isPDF,
+        hasBlob: !!currentState.pdfBlob,
+        tabId: currentState.tabId
       });
     } else {
-      console.log("[Background] No PDF URL available");
-      sendResponse({ status: "error", message: "No PDF URL available" });
+      console.log("[Background] No content available");
+      sendResponse({ status: "error", message: "No content available" });
     }
     return;
   }
   
-  if (message.type === "SUMMARIZE_PDF") {
-    console.log("[Background] Starting PDF summarization...");
+  // Handle web page content extraction request
+  if (message.type === "EXTRACT_WEBPAGE_CONTENT") {
+    if (!currentState.tabId || currentState.isPDF) {
+      sendResponse({ status: "error", message: "No active tab or tab is a PDF" });
+      return;
+    }
+    
+    // Send message to content script to extract the content
+    browser.tabs.sendMessage(currentState.tabId, { type: "EXTRACT_WEBPAGE_CONTENT" })
+      .then(response => {
+        console.log("[Background] Content script response:", response);
+        sendResponse(response);
+      })
+      .catch(error => {
+        console.error("[Background] Error from content script:", error);
+        sendResponse({ status: "error", message: error.message });
+      });
+    
+    return true; // Indicate we will respond asynchronously
+  }
+  
+  if (message.type === "SUMMARIZE_CONTENT") {
+    console.log("[Background] Starting content summarization...");
     const textToSummarize = message.text || "No text provided";
     console.log("[Background] Text length:", textToSummarize.length);
     
@@ -75,7 +113,7 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       })
       .catch(error => {
-        console.error("[Background] Error summarizing PDF:", error);
+        console.error("[Background] Error summarizing content:", error);
         sendResponse({ 
           status: "error", 
           message: error.message 

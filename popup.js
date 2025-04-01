@@ -2,82 +2,137 @@ document.addEventListener('DOMContentLoaded', () => {
   const summarizeButton = document.getElementById('summarize');
   const statusDiv = document.getElementById('status');
 
-  // Set up PDF.js worker
+  // Set up PDF.js worker for PDF processing
   const pdfjsLib = window.pdfjsLib;
   pdfjsLib.GlobalWorkerOptions.workerSrc = '../lib/pdf.worker.min.js';
 
   // Disable the button initially
   summarizeButton.disabled = true;
+  
+  // Current content state
+  let contentState = {
+    url: null,
+    isPDF: false,
+    tabId: null
+  };
 
-  // Check if a PDF is currently open
-  browser.runtime.sendMessage({ type: "GET_PDF_CONTENT" })
+  // Check what content is currently open
+  browser.runtime.sendMessage({ type: "GET_CURRENT_CONTENT" })
     .then(response => {
       console.log("[Popup] Response from background:", response);
       
       if (response && response.status === "success") {
-        // Enable the button if we have PDF content
+        // Store the content state
+        contentState = {
+          url: response.url,
+          isPDF: response.isPDF,
+          tabId: response.tabId
+        };
+        
+        // Enable the button and update UI based on content type
         summarizeButton.disabled = false;
+        summarizeButton.textContent = contentState.isPDF ? 
+          "Summarize PDF" : "Summarize Page";
       } else {
-        showStatus('No PDF detected. Please open a PDF file first.', 'error');
+        showStatus('No content detected. Please open a page or PDF first.', 'error');
       }
     })
     .catch(error => {
-      console.error('[Popup] Error checking PDF content:', error);
+      console.error('[Popup] Error checking content:', error);
       showStatus('Error connecting to extension: ' + error.message, 'error');
     });
 
   summarizeButton.addEventListener('click', async () => {
     try {
+      // Update button state
       summarizeButton.disabled = true;
       summarizeButton.innerHTML = '<span class="loading"></span> Processing...';
-      showStatus('Processing PDF...', 'success');
+      showStatus('Processing content...', 'success');
       
-      // Request PDF content from background
-      const response = await browser.runtime.sendMessage({ 
-        type: "GET_PDF_CONTENT"
-      });
+      let contentText = '';
       
-      console.log("[Popup] PDF content response:", response);
-      
-      if (!response || response.status !== "success") {
-        throw new Error(response?.message || "Failed to get PDF content");
+      // Handle different content types
+      if (contentState.isPDF) {
+        // For PDFs, fetch the content and extract text using PDF.js
+        contentText = await processPDFContent(contentState.url);
+      } else {
+        // For webpages, extract content using the content script
+        contentText = await processWebpageContent();
       }
       
-      // Fetch the PDF directly and process it
-      const pdfResponse = await fetch(response.url);
-      const pdfArrayBuffer = await pdfResponse.arrayBuffer();
-      console.log("[Popup] PDF data received:", pdfArrayBuffer.byteLength, "bytes");
+      console.log("[Popup] Content extracted, length:", contentText.length);
+      console.log("[Popup] Content preview:", contentText.substring(0, 500) + "...");
       
-      // Extract text from PDF
-      const pdfText = await extractTextFromPdf(pdfArrayBuffer);
-      console.log("[Popup] Extracted text length:", pdfText.length);
-      console.log("[Popup] Extracted text preview:", pdfText.substring(0, 500));
-      
-      // Send the extracted text for summarization
-      const summaryResponse = await browser.runtime.sendMessage({
-        type: "SUMMARIZE_PDF",
-        text: pdfText
-      });
-      
-      if (!summaryResponse || summaryResponse.status !== "success") {
-        throw new Error(summaryResponse?.message || "Failed to summarize PDF");
-      }
+      // Summarize the content
+      const summary = await summarizeContent(contentText);
       
       // Display the summary
       showStatus('Summary completed!', 'success');
-      displaySummary(summaryResponse.summary);
-      
-      // Re-enable the button
-      summarizeButton.disabled = false;
-      summarizeButton.innerHTML = 'Summarize Current PDF';
+      displaySummary(summary);
       
     } catch (error) {
       console.error('[Popup] Error:', error);
-      showStatus('Failed to process PDF: ' + error.message, 'error');
+      showStatus('Failed to process content: ' + error.message, 'error');
+    } finally {
+      // Re-enable the button
       summarizeButton.disabled = false;
-      summarizeButton.innerHTML = 'Summarize Current PDF';
+      summarizeButton.innerHTML = contentState.isPDF ? 
+        "Summarize PDF" : "Summarize Page";
     }
   });
+  
+  // Process PDF content using PDF.js
+  async function processPDFContent(url) {
+    // Request PDF URL from background
+    const response = await browser.runtime.sendMessage({ 
+      type: "GET_CURRENT_CONTENT"
+    });
+    
+    console.log("[Popup] PDF content response:", response);
+    
+    if (!response || response.status !== "success" || !response.isPDF) {
+      throw new Error(response?.message || "Failed to get PDF content");
+    }
+    
+    // Fetch the PDF directly and process it
+    const pdfResponse = await fetch(response.url);
+    const pdfArrayBuffer = await pdfResponse.arrayBuffer();
+    console.log("[Popup] PDF data received:", pdfArrayBuffer.byteLength, "bytes");
+    
+    // Extract text from PDF
+    return extractTextFromPdf(pdfArrayBuffer);
+  }
+  
+  // Process webpage content using content script
+  async function processWebpageContent() {
+    const response = await browser.runtime.sendMessage({ 
+      type: "EXTRACT_WEBPAGE_CONTENT"
+    });
+    
+    console.log("[Popup] Webpage content response:", response);
+    
+    if (!response || response.status !== "success") {
+      throw new Error(response?.message || "Failed to extract webpage content");
+    }
+    
+    return response.content;
+  }
+  
+  // Summarize content using the background script
+  async function summarizeContent(text) {
+    const response = await browser.runtime.sendMessage({
+      type: "SUMMARIZE_CONTENT",
+      text: text
+    });
+    
+    console.log("[Popup] Summarization response:", response);
+    
+    if (!response || response.status !== "success") {
+      throw new Error(response?.message || "Failed to summarize content");
+    }
+    
+    return response.summary;
+  }
 });
 
 function showStatus(message, type) {
@@ -119,7 +174,7 @@ function displaySummary(summary) {
   `;
   
   content.innerHTML = `
-    <h3>PDF Summary</h3>
+    <h3>Content Summary</h3>
     <p>${summary}</p>
     <button id="close-summary" style="
       padding: 8px 16px;
