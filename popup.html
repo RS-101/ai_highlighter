@@ -21,7 +21,11 @@
       border-radius: 4px;
       cursor: pointer;
     }
-    button:hover {
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    button:hover:not(:disabled) {
       background-color: #003eaa;
     }
     .status {
@@ -38,7 +42,23 @@
       background-color: #ffe6e6;
       color: #cc0000;
     }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(0, 96, 223, 0.3);
+      border-radius: 50%;
+      border-top-color: #0060df;
+      animation: spin 1s ease-in-out infinite;
+      margin-right: 10px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
+  <!-- Load PDF.js library -->
+  <script src="../lib/pdf.min.js"></script>
 </head>
 <body>
   <div class="container">

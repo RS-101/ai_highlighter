@@ -2,6 +2,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const summarizeButton = document.getElementById('summarize');
   const statusDiv = document.getElementById('status');
 
+  // Set up PDF.js worker
+  const pdfjsLib = window.pdfjsLib;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '../lib/pdf.worker.min.js';
+
   // Disable the button initially
   summarizeButton.disabled = true;
 
@@ -24,6 +28,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   summarizeButton.addEventListener('click', async () => {
     try {
+      summarizeButton.disabled = true;
+      summarizeButton.innerHTML = '<span class="loading"></span> Processing...';
       showStatus('Processing PDF...', 'success');
       
       // Request PDF content from background
@@ -39,12 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Fetch the PDF directly and process it
       const pdfResponse = await fetch(response.url);
-      const pdfBlob = await pdfResponse.blob();
-      console.log("[Popup] PDF blob received:", pdfBlob.size, "bytes");
+      const pdfArrayBuffer = await pdfResponse.arrayBuffer();
+      console.log("[Popup] PDF data received:", pdfArrayBuffer.byteLength, "bytes");
       
       // Extract text from PDF
-      const pdfText = await extractTextFromPdf(pdfBlob);
+      const pdfText = await extractTextFromPdf(pdfArrayBuffer);
       console.log("[Popup] Extracted text length:", pdfText.length);
+      console.log("[Popup] Extracted text preview:", pdfText.substring(0, 500));
       
       // Send the extracted text for summarization
       const summaryResponse = await browser.runtime.sendMessage({
@@ -60,9 +67,15 @@ document.addEventListener('DOMContentLoaded', () => {
       showStatus('Summary completed!', 'success');
       displaySummary(summaryResponse.summary);
       
+      // Re-enable the button
+      summarizeButton.disabled = false;
+      summarizeButton.innerHTML = 'Summarize Current PDF';
+      
     } catch (error) {
       console.error('[Popup] Error:', error);
       showStatus('Failed to process PDF: ' + error.message, 'error');
+      summarizeButton.disabled = false;
+      summarizeButton.innerHTML = 'Summarize Current PDF';
     }
   });
 });
@@ -73,10 +86,10 @@ function showStatus(message, type) {
   statusDiv.className = `status ${type}`;
   statusDiv.style.display = 'block';
 
-  // Hide the status message after 3 seconds
+  // Hide the status message after 5 seconds
   setTimeout(() => {
     statusDiv.style.display = 'none';
-  }, 3000);
+  }, 5000);
 }
 
 function displaySummary(summary) {
@@ -127,11 +140,33 @@ function displaySummary(summary) {
   });
 }
 
-// Function to extract text from a PDF blob
-async function extractTextFromPdf(pdfBlob) {
-  // In a real implementation, you would use PDF.js or similar library
-  // For now, just return a sample text
-  return "This is a placeholder for extracted PDF text. In a real implementation, " +
-         "you would use PDF.js or a similar library to extract the actual text " +
-         "from the PDF document. The PDF blob size is " + pdfBlob.size + " bytes.";
+// Function to extract text from a PDF using PDF.js
+async function extractTextFromPdf(arrayBuffer) {
+  try {
+    console.log("[Popup] Starting PDF extraction with PDF.js");
+    
+    // Load the PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    console.log("[Popup] PDF document loaded with", pdf.numPages, "pages");
+    
+    let fullText = '';
+    
+    // Iterate through each page
+    for (let i = 1; i <= pdf.numPages; i++) {
+      console.log("[Popup] Processing page", i);
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      
+      // Extract text from the page
+      const pageText = textContent.items.map(item => item.str).join(' ');
+      fullText += pageText + '\n\n';
+    }
+    
+    console.log("[Popup] PDF text extraction complete");
+    return fullText;
+  } catch (error) {
+    console.error("[Popup] Error extracting text from PDF:", error);
+    throw new Error("Failed to extract text from PDF: " + error.message);
+  }
 } 
