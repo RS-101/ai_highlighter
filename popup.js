@@ -170,29 +170,19 @@ function showStatus(message, type) {
 }
 
 function displaySummaryAndHighlights(analysis, isPDF) {
-  // Create a modal to display the summary and highlights
-  const modal = document.createElement('div');
-  modal.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 1000;
-  `;
+  // Clear previous content
+  const contentContainer = document.getElementById('content-container');
+  contentContainer.innerHTML = '';
   
+  // Hide the main container
+  document.getElementById('main-container').style.display = 'none';
+  
+  // Create content
   const content = document.createElement('div');
   content.style.cssText = `
     background: white;
-    padding: 20px;
-    border-radius: 8px;
-    max-width: 80%;
-    max-height: 80%;
-    overflow-y: auto;
+    padding: 10px 0;
+    width: 100%;
   `;
   
   // Create HTML for highlights
@@ -227,14 +217,14 @@ function displaySummaryAndHighlights(analysis, isPDF) {
     ${pdfMessage}
     
     <div style="display: flex; justify-content: space-between; margin-top: 15px;">
-      <button id="close-summary" style="
+      <button id="back-button" style="
         padding: 8px 16px;
         background-color: #0060df;
         color: white;
         border: none;
         border-radius: 4px;
         cursor: pointer;
-      ">Close</button>
+      ">Back</button>
       
       ${!isPDF ? `
       <button id="toggle-highlights" style="
@@ -249,12 +239,31 @@ function displaySummaryAndHighlights(analysis, isPDF) {
     </div>
   `;
   
-  modal.appendChild(content);
-  document.body.appendChild(modal);
+  contentContainer.appendChild(content);
+  
+  // Resize popup window to fit content
+  setTimeout(() => {
+    const newHeight = document.body.scrollHeight;
+    const newWidth = Math.min(600, Math.max(300, document.body.scrollWidth));
+    
+    browser.runtime.sendMessage({ 
+      type: "RESIZE_POPUP", 
+      width: newWidth,
+      height: newHeight
+    }).catch(err => console.error("[Popup] Error resizing popup:", err));
+  }, 50);
   
   // Add event listeners to buttons
-  document.getElementById('close-summary').addEventListener('click', () => {
-    modal.remove();
+  document.getElementById('back-button').addEventListener('click', () => {
+    contentContainer.innerHTML = '';
+    document.getElementById('main-container').style.display = 'flex';
+    
+    // Resize back to default
+    browser.runtime.sendMessage({ 
+      type: "RESIZE_POPUP", 
+      width: 300,
+      height: 200
+    }).catch(err => console.error("[Popup] Error resizing popup:", err));
   });
   
   // Add toggle highlights button for webpages

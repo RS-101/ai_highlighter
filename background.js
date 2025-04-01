@@ -98,6 +98,28 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return browser.tabs.sendMessage(tab.id, { type: "EXTRACT_WEBPAGE_CONTENT" });
         });
     
+    case "RESIZE_POPUP":
+      // Resize the popup window
+      if (browser.browserAction && browser.browserAction.setPopup) {
+        console.log("[Background] Resizing popup to:", message.width, "x", message.height);
+        
+        try {
+          // For Firefox, we need to recreate the popup with parameters for sizing
+          const popup = new URL(browser.runtime.getURL("popup.html"));
+          popup.searchParams.set("width", message.width);
+          popup.searchParams.set("height", message.height);
+          
+          browser.browserAction.setPopup({ popup: popup.toString() });
+          return Promise.resolve({ status: "success" });
+        } catch (error) {
+          console.error("[Background] Error resizing popup:", error);
+          return Promise.resolve({ status: "error", message: error.message });
+        }
+      } else {
+        console.log("[Background] browserAction.setPopup not available");
+        return Promise.resolve({ status: "error", message: "browserAction.setPopup not available" });
+      }
+        
     case "AUTO_PROCESS_CONTENT":
       // Automatically process content when page loads
       console.log("[Background] Auto-processing webpage content");

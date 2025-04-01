@@ -4,9 +4,13 @@
   <meta charset="UTF-8">
   <style>
     body {
-      width: 300px;
+      min-width: 300px;
+      max-width: 600px;
+      width: auto;
       padding: 15px;
       font-family: Arial, sans-serif;
+      margin: 0;
+      overflow-x: hidden;
     }
     .container {
       display: flex;
@@ -56,17 +60,36 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    #content-container {
+      width: 100%;
+      overflow-x: hidden;
+    }
   </style>
   <!-- Load PDF.js library -->
   <script src="../lib/pdf.min.js"></script>
+  <script>
+    // Apply custom dimensions from URL parameters
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const width = urlParams.get('width');
+      const height = urlParams.get('height');
+      
+      if (width && height) {
+        console.log("[Popup] Setting dimensions from URL:", width, "x", height);
+        document.body.style.width = `${width}px`;
+        document.body.style.height = `${height}px`;
+      }
+    });
+  </script>
 </head>
 <body>
-  <div class="container">
+  <div class="container" id="main-container">
     <h2>Content Summarizer</h2>
     <p>This extension summarizes webpages and PDF files, highlighting key passages for easier reading.</p>
     <button id="summarize">Summarize Content</button>
     <div id="status" class="status"></div>
   </div>
+  <div id="content-container"></div>
   <script src="popup.js"></script>
 </body>
 </html> 
