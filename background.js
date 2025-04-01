@@ -57,71 +57,92 @@ async function fetchPDFContent(url) {
   }
 }
 
-// Listen for messages from popup or content script
+// Listen for messages from content script or popup
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log("[Background] Received message:", message);
   
-  if (message.type === "GET_CURRENT_CONTENT") {
-    if (currentState.url) {
-      console.log("[Background] Returning current state:", currentState);
-      sendResponse({ 
-        status: "success", 
-        url: currentState.url,
-        isPDF: currentState.isPDF,
-        hasBlob: !!currentState.pdfBlob,
-        tabId: currentState.tabId
-      });
-    } else {
-      console.log("[Background] No content available");
-      sendResponse({ status: "error", message: "No content available" });
-    }
-    return;
+  switch (message.type) {
+    case "GET_CURRENT_CONTENT":
+      // Get current tab info
+      return browser.tabs.query({ active: true, currentWindow: true })
+        .then(tabs => {
+          if (tabs.length === 0) {
+            return { status: "error", message: "No active tab found" };
+          }
+          
+          const tab = tabs[0];
+          const isPDF = tab.url.toLowerCase().endsWith('.pdf') || 
+                       tab.url.startsWith('file://') && tab.url.toLowerCase().endsWith('.pdf');
+          
+          return {
+            status: "success",
+            url: tab.url,
+            isPDF: isPDF,
+            tabId: tab.id
+          };
+        });
+        
+    case "EXTRACT_WEBPAGE_CONTENT":
+      // Extract content from webpage
+      return browser.tabs.query({ active: true, currentWindow: true })
+        .then(tabs => {
+          if (tabs.length === 0) {
+            return { status: "error", message: "No active tab found" };
+          }
+          
+          const tab = tabs[0];
+          if (tab.url.toLowerCase().endsWith('.pdf')) {
+            return { status: "error", message: "Cannot extract content from PDF" };
+          }
+          
+          return browser.tabs.sendMessage(tab.id, { type: "EXTRACT_WEBPAGE_CONTENT" });
+        });
+    
+    case "AUTO_PROCESS_CONTENT":
+      // Automatically process content when page loads
+      console.log("[Background] Auto-processing webpage content");
+      return summarizeText(message.content)
+        .then(result => {
+          return {
+            status: "success",
+            summary: result
+          };
+        })
+        .catch(error => {
+          console.error("[Background] Auto-processing error:", error);
+          return {
+            status: "error",
+            message: error.message
+          };
+        });
+        
+    case "SUMMARIZE_CONTENT":
+      // Summarize the provided text
+      return summarizeText(message.text)
+        .then(result => {
+          return {
+            status: "success",
+            summary: result
+          };
+        })
+        .catch(error => {
+          console.error("[Background] Summarization error:", error);
+          return {
+            status: "error",
+            message: error.message
+          };
+        });
+        
+    case "PDF_CONTENT":
+      // Handle PDF content from content script
+      console.log("[Background] Received PDF content");
+      return sendResponse({ status: "success" });
+      
+    default:
+      return Promise.resolve({ status: "error", message: "Unknown message type" });
   }
   
-  // Handle web page content extraction request
-  if (message.type === "EXTRACT_WEBPAGE_CONTENT") {
-    if (!currentState.tabId || currentState.isPDF) {
-      sendResponse({ status: "error", message: "No active tab or tab is a PDF" });
-      return;
-    }
-    
-    // Send message to content script to extract the content
-    browser.tabs.sendMessage(currentState.tabId, { type: "EXTRACT_WEBPAGE_CONTENT" })
-      .then(response => {
-        console.log("[Background] Content script response:", response);
-        sendResponse(response);
-      })
-      .catch(error => {
-        console.error("[Background] Error from content script:", error);
-        sendResponse({ status: "error", message: error.message });
-      });
-    
-    return true; // Indicate we will respond asynchronously
-  }
-  
-  if (message.type === "SUMMARIZE_CONTENT") {
-    console.log("[Background] Starting content summarization...");
-    const textToSummarize = message.text || "No text provided";
-    console.log("[Background] Text length:", textToSummarize.length);
-    
-    summarizeText(textToSummarize)
-      .then(result => {
-        console.log("[Background] Summarization successful");
-        // Make sure we're returning both summary and highlights in the expected format
-        sendResponse({ 
-          status: "success", 
-          summary: result // This already contains {summary, highlights}
-        });
-      })
-      .catch(error => {
-        console.error("[Background] Error summarizing content:", error);
-        sendResponse({ 
-          status: "error", 
-          message: error.message 
-        });
-      });
-    return true; // Will respond asynchronously
-  }
+  return true; // Keep the message channel open for async responses
 });
 
 async function summarizeText(text) {

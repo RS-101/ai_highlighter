@@ -22,7 +22,8 @@
     {
       "matches": ["*://*/*"],
       "js": ["content.js"],
-      "exclude_matches": ["*://*/*.pdf"]
+      "exclude_matches": ["*://*/*.pdf"],
+      "run_at": "document_start"
     }
   ],
   "web_accessible_resources": [

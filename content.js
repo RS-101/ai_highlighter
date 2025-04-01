@@ -1,94 +1,127 @@
 console.log("[Content] Content script loaded on:", window.location.href);
 
-// Variables to store highlights
+// Global state for highlights
 let highlights = [];
 let highlightsApplied = false;
-let highlightedElements = [];
+let highlightedElements = new Set();
+let contentProcessed = false;
 
-// Add style for highlights to the page
+// Add highlight styles to the page
 function addHighlightStyles() {
   const style = document.createElement('style');
   style.textContent = `
     .ai-highlight {
-      background-color: #ffff99;
-      padding: 2px;
+      background-color: #ffeb3b;
+      padding: 2px 0;
       border-radius: 2px;
-    }
-    .ai-highlight-found {
-      color: #0060df;
-      font-weight: bold;
     }
   `;
   document.head.appendChild(style);
 }
 
-// Add styles immediately
-addHighlightStyles();
+// Initialize the extension
+function initializeExtension() {
+  if (contentProcessed) return; // Prevent multiple initializations
+  
+  console.log("[Content] Initializing extension...");
+  addHighlightStyles();
+  
+  // Extract content immediately and send to background for processing
+  extractPageContent()
+    .then(content => {
+      console.log("[Content] Content extracted, length:", content.length);
+      // Store the content for later use
+      window.pageContent = content;
+      contentProcessed = true;
+      
+      // Send the content to the background script for automatic processing
+      return browser.runtime.sendMessage({
+        type: "AUTO_PROCESS_CONTENT",
+        content: content
+      });
+    })
+    .then(response => {
+      console.log("[Content] Auto-processing response:", response);
+      if (response && response.status === "success" && response.summary && response.summary.highlights) {
+        // Apply highlights automatically
+        return applyHighlights(response.summary.highlights);
+      }
+    })
+    .catch(error => {
+      console.error("[Content] Error in auto-processing:", error);
+    });
+}
 
-// Listen for messages from the background script or popup
+// Initialize as soon as possible based on document readiness
+if (document.readyState === 'loading') {
+  // Document still loading, wait for it to be ready
+  console.log("[Content] Document still loading, waiting for DOMContentLoaded...");
+  document.addEventListener('DOMContentLoaded', initializeExtension);
+} else {
+  // Document already loaded, initialize immediately
+  console.log("[Content] Document already loaded, initializing immediately...");
+  initializeExtension();
+}
+
+// Listen for messages from background script or popup
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('[Content] Received message:', message);
+  console.log("[Content] Received message:", message);
   
-  if (message.type === "EXTRACT_WEBPAGE_CONTENT") {
-    try {
-      const pageContent = extractPageContent();
-      console.log('[Content] Extracted page content length:', pageContent.length);
-      sendResponse({ 
-        status: "success", 
-        content: pageContent 
+  switch (message.type) {
+    case "EXTRACT_WEBPAGE_CONTENT":
+      // Return the stored content if available, otherwise extract it
+      if (window.pageContent) {
+        sendResponse({
+          status: "success",
+          content: window.pageContent
+        });
+      } else {
+        extractPageContent()
+          .then(content => {
+            window.pageContent = content;
+            sendResponse({
+              status: "success",
+              content: content
+            });
+          })
+          .catch(error => {
+            console.error("[Content] Error extracting content:", error);
+            sendResponse({
+              status: "error",
+              message: error.message
+            });
+          });
+        return true; // Keep the message channel open for async response
+      }
+      break;
+      
+    case "APPLY_HIGHLIGHTS":
+      // Apply new highlights
+      applyHighlights(message.highlights).then(response => {
+        sendResponse(response);
+      }).catch(error => {
+        console.error("[Content] Error applying highlights:", error);
+        sendResponse({
+          status: "error",
+          message: error.message
+        });
       });
-    } catch (error) {
-      console.error('[Content] Error extracting content:', error);
-      sendResponse({ 
-        status: "error", 
-        message: error.message 
-      });
-    }
-  }
-  
-  if (message.type === "APPLY_HIGHLIGHTS") {
-    try {
-      highlights = message.highlights || [];
-      applyHighlights();
-      sendResponse({ 
-        status: "success", 
-        highlightsApplied: true,
-        count: highlights.length
-      });
-    } catch (error) {
-      console.error('[Content] Error applying highlights:', error);
-      sendResponse({ 
-        status: "error", 
-        message: error.message 
-      });
-    }
-  }
-  
-  if (message.type === "TOGGLE_HIGHLIGHTS") {
-    try {
+      return true;
+      
+    case "TOGGLE_HIGHLIGHTS":
+      // Toggle highlights visibility
       if (highlightsApplied) {
         removeHighlights();
       } else {
-        applyHighlights();
+        applyHighlights(highlights);
       }
-      sendResponse({ 
-        status: "success", 
-        highlightsApplied: highlightsApplied
-      });
-    } catch (error) {
-      console.error('[Content] Error toggling highlights:', error);
-      sendResponse({ 
-        status: "error", 
-        message: error.message 
-      });
-    }
+      sendResponse({ status: "success" });
+      break;
   }
-  
-  return true; // Keep the message channel open for async response
 });
 
 // Function to extract readable content from the webpage
-function extractPageContent() {
+async function extractPageContent() {
   console.log('[Content] Extracting page content...');
   
   try {
@@ -153,27 +186,31 @@ function extractPageContent() {
     const extractedText = `Title: ${title}\n\n${content}`;
     console.log('[Content] Extraction complete, text length:', extractedText.length);
     
-    return extractedText;
+    return Promise.resolve(extractedText);
   } catch (error) {
     console.error('[Content] Error during extraction:', error);
-    throw new Error('Failed to extract webpage content: ' + error.message);
+    return Promise.reject(new Error('Failed to extract webpage content: ' + error.message));
   }
 }
 
 // Function to apply highlights to the webpage
-function applyHighlights() {
-  if (!highlights || !highlights.length) {
+function applyHighlights(newHighlights) {
+  if (!newHighlights || !newHighlights.length) {
     console.log('[Content] No highlights to apply');
-    return;
+    return Promise.resolve({
+      status: "success",
+      highlightsApplied: false,
+      count: 0
+    });
   }
   
-  console.log('[Content] Applying highlights:', highlights);
+  console.log('[Content] Applying highlights:', newHighlights);
   
   // Remove any existing highlights first
   removeHighlights();
   
   // Preprocess highlights to escape regex special characters and sort by length (longest first)
-  const processedHighlights = highlights
+  const processedHighlights = newHighlights
     .map(text => ({ 
       text, 
       regex: new RegExp(escapeRegExp(text), 'gi') 
@@ -184,9 +221,16 @@ function applyHighlights() {
   findAndHighlightInPage(processedHighlights);
   
   // Show a notification that highlights were applied
-  showHighlightNotification(highlights.length);
+  showHighlightNotification(newHighlights.length);
   
+  highlights = newHighlights;
   highlightsApplied = true;
+  
+  return Promise.resolve({
+    status: "success",
+    highlightsApplied: true,
+    count: newHighlights.length
+  });
 }
 
 // Improved method to find and highlight text throughout the page
@@ -234,7 +278,7 @@ function findAndHighlightInPage(processedHighlights) {
         parentNode.appendChild(fragment);
         
         // Track this for future cleanup
-        highlightedElements.push(parentNode);
+        highlightedElements.add(parentNode);
       }
     });
     
@@ -283,7 +327,7 @@ function findAndHighlightInPage(processedHighlights) {
           const tempSpan = document.createElement('span');
           tempSpan.innerHTML = highlighted;
           parent.replaceChild(tempSpan, currentNode);
-          highlightedElements.push(tempSpan);
+          highlightedElements.add(tempSpan);
           
           // Update the current node
           currentNode = walker.nextNode();
@@ -400,7 +444,7 @@ function removeHighlights() {
   });
   
   // Reset tracked elements
-  highlightedElements = [];
+  highlightedElements.clear();
   highlightsApplied = false;
 }
 

@@ -56,12 +56,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // For PDFs, fetch the content and extract text using PDF.js
         contentText = await processPDFContent(contentState.url);
       } else {
-        // For webpages, extract content using the content script
+        // For webpages, get the already extracted content
         contentText = await processWebpageContent();
       }
       
       console.log("[Popup] Content extracted, length:", contentText.length);
-      console.log("[Popup] Content preview:", contentText.substring(0, 500) + "...");
       
       // Summarize the content
       const analysisResult = await summarizeContent(contentText);
@@ -136,11 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
       throw new Error(response?.message || "Failed to summarize content");
     }
     
-    // Ensure we have the right format for analysis results
-    return {
-      summary: response.summary.summary,
-      highlights: response.summary.highlights || []
-    };
+    return response.summary;
   }
   
   // Apply highlights to the webpage
