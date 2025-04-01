@@ -52,8 +52,8 @@ A Firefox extension that intelligently summarizes webpages and PDF documents whi
 
 ## API Key
 
-This extension uses the Anwall LLM API for summarization. You'll need to:
-1. Obtain an API key from [Anwall](https://awanllm.com/)
+This extension uses the Awan LLM API for summarization. You'll need to:
+1. Obtain an API key from [Awan LLM](https://awanllm.com/)
 2. Enter it in the extension settings
 3. Your API key is stored locally and never shared
 
@@ -75,4 +75,4 @@ All Rights Reserved
 
 ## Support
 
-For issues or feature requests, please submit them on our [GitHub repository](https://github.com/your-username/ai_highlighter)
+For issues or feature requests, please submit them on our [GitHub repository](https://github.com/RS-101/ai_highlighter)
