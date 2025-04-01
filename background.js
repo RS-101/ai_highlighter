@@ -8,7 +8,10 @@ let currentState = {
   url: null,
   isPDF: false,
   pdfBlob: null,
-  tabId: null
+  tabId: null,
+  summary: null,  // Store the latest summary result
+  highlights: null, // Store the latest highlights
+  timestamp: null  // Track when the summary was generated
 };
 
 // Listen for web navigation events
@@ -21,6 +24,8 @@ browser.webNavigation.onCompleted.addListener((details) => {
   // Store the tab ID
   currentState.tabId = details.tabId;
   currentState.url = details.url;
+  currentState.summary = null;
+  currentState.highlights = null;
   
   // Check if the URL ends with .pdf
   if (details.url && details.url.toLowerCase().endsWith('.pdf')) {
@@ -74,11 +79,16 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const isPDF = tab.url.toLowerCase().endsWith('.pdf') || 
                        tab.url.startsWith('file://') && tab.url.toLowerCase().endsWith('.pdf');
           
+          // Include any cached summary data
           return {
             status: "success",
             url: tab.url,
             isPDF: isPDF,
-            tabId: tab.id
+            tabId: tab.id,
+            hasCachedSummary: !!(currentState.summary && currentState.url === tab.url),
+            summary: currentState.summary,
+            highlights: currentState.highlights,
+            timestamp: currentState.timestamp
           };
         });
         
@@ -125,6 +135,21 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.log("[Background] Auto-processing webpage content");
       return summarizeText(message.content)
         .then(result => {
+          // Store the summary in currentState
+          if (result) {
+            currentState.summary = result.summary;
+            currentState.highlights = result.highlights;
+            currentState.timestamp = Date.now();
+            
+            // Associate with the current URL
+            if (sender && sender.tab) {
+              currentState.url = sender.tab.url;
+              currentState.tabId = sender.tab.id;
+            }
+            
+            console.log("[Background] Cached summary for URL:", currentState.url);
+          }
+          
           return {
             status: "success",
             summary: result
@@ -139,9 +164,36 @@ browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         
     case "SUMMARIZE_CONTENT":
+      // Check if we have a cached summary for this content
+      if (currentState.url === message.url && currentState.summary) {
+        console.log("[Background] Returning cached summary for:", message.url);
+        return Promise.resolve({
+          status: "success",
+          summary: {
+            summary: currentState.summary,
+            highlights: currentState.highlights
+          },
+          fromCache: true
+        });
+      }
+      
       // Summarize the provided text
       return summarizeText(message.text)
         .then(result => {
+          // Store the summary in currentState
+          if (result) {
+            currentState.summary = result.summary;
+            currentState.highlights = result.highlights;
+            currentState.timestamp = Date.now();
+            
+            // Associate with the URL if provided
+            if (message.url) {
+              currentState.url = message.url;
+            }
+            
+            console.log("[Background] Cached new summary for URL:", currentState.url);
+          }
+          
           return {
             status: "success",
             summary: result

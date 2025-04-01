@@ -66,6 +66,30 @@ document.addEventListener('DOMContentLoaded', () => {
         summarizeButton.disabled = false;
         summarizeButton.textContent = contentState.isPDF ? 
           "Summarize PDF" : "Summarize Page";
+          
+        // If we have a cached summary, display it immediately
+        if (response.hasCachedSummary && response.summary && response.highlights) {
+          console.log("[Popup] Using cached summary from background");
+          
+          // Create analysis result from cached data
+          const analysisResult = {
+            summary: response.summary,
+            highlights: response.highlights
+          };
+          
+          // Display the summary and highlights
+          showStatus('Showing cached summary', 'success');
+          displaySummaryAndHighlights(analysisResult, contentState.isPDF);
+          
+          // Show time since generation
+          const timeAgo = getTimeAgo(response.timestamp);
+          showTimestamp(timeAgo);
+          
+          // Apply highlights if it's a webpage (they might have been removed)
+          if (!contentState.isPDF) {
+            applyWebpageHighlights(analysisResult.highlights);
+          }
+        }
       } else {
         showStatus('No content detected. Please open a page or PDF first.', 'error');
       }
@@ -168,7 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
   async function summarizeContent(text) {
     const response = await browser.runtime.sendMessage({
       type: "SUMMARIZE_CONTENT",
-      text: text
+      text: text,
+      url: contentState.url // Include the current URL for caching
     });
     
     console.log("[Popup] Summarization response:", response);
@@ -349,4 +374,67 @@ async function extractTextFromPdf(arrayBuffer) {
     console.error("[Popup] Error extracting text from PDF:", error);
     throw new Error("Failed to extract text from PDF: " + error.message);
   }
+}
+
+// Get a human-readable time ago string
+function getTimeAgo(timestamp) {
+  if (!timestamp) return '';
+  
+  const now = Date.now();
+  const seconds = Math.floor((now - timestamp) / 1000);
+  
+  if (seconds < 60) {
+    return 'just now';
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  } else if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } else {
+    const days = Math.floor(seconds / 86400);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  }
+}
+
+// Show timestamp in the summary view
+function showTimestamp(timeAgo) {
+  setTimeout(() => {
+    // Create timestamp element
+    const timestampElement = document.createElement('div');
+    timestampElement.className = 'cached-info';
+    
+    // Create refresh button
+    const refreshButton = document.createElement('button');
+    refreshButton.className = 'refresh-button';
+    refreshButton.textContent = 'Refresh';
+    refreshButton.onclick = async (e) => {
+      e.preventDefault();
+      
+      // Hide the timestamp and button
+      timestampElement.style.display = 'none';
+      
+      // Trigger the summarize button click
+      document.getElementById('summarize').click();
+    };
+    
+    // Create timestamp text
+    const timestampText = document.createElement('span');
+    timestampText.textContent = `Summary generated ${timeAgo}`;
+    
+    // Add elements to timestamp container
+    timestampElement.appendChild(timestampText);
+    timestampElement.appendChild(refreshButton);
+    
+    // Add to the summary container
+    const content = document.querySelector('#content-container > div');
+    if (content) {
+      // Insert at the top of the content
+      if (content.firstChild) {
+        content.insertBefore(timestampElement, content.firstChild);
+      } else {
+        content.appendChild(timestampElement);
+      }
+    }
+  }, 100);
 } 

@@ -101,7 +101,9 @@ function initializeExtension() {
       // Send the content to the background script for automatic processing
       return browser.runtime.sendMessage({
         type: "AUTO_PROCESS_CONTENT",
-        content: content
+        content: content,
+        url: window.location.href,
+        pageTitle: document.title
       });
     })
     .then(response => {
