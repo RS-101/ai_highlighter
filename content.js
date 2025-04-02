@@ -58,10 +58,17 @@ function showLoadingIndicator() {
   
   const loadingIndicator = document.createElement('div');
   loadingIndicator.className = 'ai-loading-overlay';
-  loadingIndicator.innerHTML = `
-    <div class="ai-loading-spinner"></div>
-    <div>Processing page content...</div>
-  `;
+  
+  // Create spinner
+  const spinner = document.createElement('div');
+  spinner.className = 'ai-loading-spinner';
+  loadingIndicator.appendChild(spinner);
+  
+  // Create text
+  const text = document.createElement('div');
+  text.textContent = 'Processing page content...';
+  loadingIndicator.appendChild(text);
+  
   document.body.appendChild(loadingIndicator);
   
   return loadingIndicator;
@@ -417,19 +424,30 @@ function findAndHighlightInPage(processedHighlights) {
         console.log(`[Content] Found ${matches.length} matches in a node group`);
         foundCount += matches.length;
         
-        // Replace text in a single operation
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = combinedText.replace(highlight.regex, 
-          `<mark class="ai-highlight ai-highlight-${highlightIndex}" data-highlight-index="${highlightIndex}">$&</mark>`
-        );
-        
-        // Replace old nodes with new marked-up content
+        // Replace text in a safer way using DOM methods
         const fragment = document.createDocumentFragment();
-        while (tempDiv.firstChild) {
-          fragment.appendChild(tempDiv.firstChild);
+        
+        // Use a safe text replacement approach
+        const parts = combinedText.split(highlight.regex);
+        const matchedTexts = combinedText.match(highlight.regex) || [];
+        
+        for (let i = 0; i < parts.length; i++) {
+          // Add regular text
+          if (parts[i]) {
+            fragment.appendChild(document.createTextNode(parts[i]));
+          }
+          
+          // Add highlighted match
+          if (i < matchedTexts.length) {
+            const mark = document.createElement('mark');
+            mark.className = `ai-highlight ai-highlight-${highlightIndex}`;
+            mark.setAttribute('data-highlight-index', highlightIndex);
+            mark.textContent = matchedTexts[i];
+            fragment.appendChild(mark);
+          }
         }
         
-        // Replace all nodes in the group with our highlighted version
+        // Replace old nodes with new marked-up content
         const parentNode = group.parent;
         group.nodes.forEach(node => parentNode.removeChild(node));
         parentNode.appendChild(fragment);
@@ -475,22 +493,38 @@ function findAndHighlightInPage(processedHighlights) {
       // Check if this text contains our highlight
       if (highlight.regex.test(currentNode.nodeValue)) {
         const original = currentNode.nodeValue;
-        const highlighted = original.replace(highlight.regex, 
-          `<mark class="ai-highlight ai-highlight-${highlightIndex}" data-highlight-index="${highlightIndex}">$&</mark>`
-        );
         
-        // If we found a match, replace the text node with highlighted HTML
-        if (highlighted !== original) {
-          const tempSpan = document.createElement('span');
-          tempSpan.innerHTML = highlighted;
-          parent.replaceChild(tempSpan, currentNode);
-          highlightedElements.add(tempSpan);
+        // Create fragment for the highlighted content
+        const fragment = document.createDocumentFragment();
+        
+        // Use same approach as before - split by regex
+        const parts = original.split(highlight.regex);
+        const matchedTexts = original.match(highlight.regex) || [];
+        
+        for (let i = 0; i < parts.length; i++) {
+          // Add regular text
+          if (parts[i]) {
+            fragment.appendChild(document.createTextNode(parts[i]));
+          }
           
-          // Update the current node
-          currentNode = walker.nextNode();
-        } else {
-          currentNode = walker.nextNode();
+          // Add highlighted match
+          if (i < matchedTexts.length) {
+            const mark = document.createElement('mark');
+            mark.className = `ai-highlight ai-highlight-${highlightIndex}`;
+            mark.setAttribute('data-highlight-index', highlightIndex);
+            mark.textContent = matchedTexts[i];
+            fragment.appendChild(mark);
+          }
         }
+        
+        // Replace the original text node with our fragment
+        const tempSpan = document.createElement('span');
+        tempSpan.appendChild(fragment);
+        parent.replaceChild(tempSpan, currentNode);
+        highlightedElements.add(tempSpan);
+        
+        // Update the current node
+        currentNode = walker.nextNode();
       } else {
         currentNode = walker.nextNode();
       }

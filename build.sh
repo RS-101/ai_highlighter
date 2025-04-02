@@ -18,6 +18,12 @@ mkdir -p "$BUILD_DIR/lib" "$BUILD_DIR/icons"
 echo "Copying core files..."
 cp manifest.json popup.html popup.js background.js content.js "$BUILD_DIR/"
 
+# Copy stylesheet if it exists
+if [ -f styles.css ]; then
+  echo "Copying stylesheet..."
+  cp styles.css "$BUILD_DIR/"
+fi
+
 # Copy library files
 echo "Copying library files..."
 cp lib/pdf.min.js lib/pdf.worker.min.js "$BUILD_DIR/lib/"

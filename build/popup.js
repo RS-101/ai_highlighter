@@ -12,13 +12,29 @@ function showApiLoadingIndicator(message = "Analyzing content...") {
   
   const overlay = document.createElement('div');
   overlay.className = 'api-loading-overlay';
-  overlay.innerHTML = `
-    <div class="api-loading-spinner"></div>
-    <div class="api-loading-text">${message}</div>
-    <div class="api-loading-progress">
-      <div class="api-loading-progress-bar"></div>
-    </div>
-  `;
+  
+  // Create spinner div
+  const spinner = document.createElement('div');
+  spinner.className = 'api-loading-spinner';
+  
+  // Create text div
+  const textDiv = document.createElement('div');
+  textDiv.className = 'api-loading-text';
+  textDiv.textContent = message;
+  
+  // Create progress container
+  const progressDiv = document.createElement('div');
+  progressDiv.className = 'api-loading-progress';
+  
+  // Create progress bar
+  const progressBar = document.createElement('div');
+  progressBar.className = 'api-loading-progress-bar';
+  
+  // Append all elements
+  progressDiv.appendChild(progressBar);
+  overlay.appendChild(spinner);
+  overlay.appendChild(textDiv);
+  overlay.appendChild(progressDiv);
   
   document.body.appendChild(overlay);
   return overlay;
@@ -171,7 +187,17 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Update button state
       summarizeButton.disabled = true;
-      summarizeButton.innerHTML = '<span class="loading"></span> Processing...';
+      
+      // Create loading spinner element and update button safely
+      summarizeButton.textContent = '';
+      
+      const loadingSpinner = document.createElement('span');
+      loadingSpinner.className = 'loading';
+      summarizeButton.appendChild(loadingSpinner);
+      
+      // Add text after the spinner
+      summarizeButton.appendChild(document.createTextNode(' Processing...'));
+      
       showStatus('Processing content...', 'success');
       
       let contentText = '';
@@ -214,8 +240,15 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       // Re-enable the button
       summarizeButton.disabled = false;
-      summarizeButton.innerHTML = contentState.isPDF ? 
-        "Summarize PDF" : "Summarize Page";
+      
+      // Create and set button content safely
+      summarizeButton.textContent = '';
+      
+      if (contentState.isPDF) {
+        summarizeButton.textContent = "Summarize PDF";
+      } else {
+        summarizeButton.textContent = "Summarize Page";
+      }
     }
   });
   
@@ -310,7 +343,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Render the site list
     function renderSiteList(sites) {
-      siteList.innerHTML = '';
+      // Clear existing content
+      while (siteList.firstChild) {
+        siteList.removeChild(siteList.firstChild);
+      }
       
       if (sites.length === 0) {
         const emptyMessage = document.createElement('div');
@@ -544,14 +580,16 @@ function showStatus(message, type) {
 }
 
 function displaySummaryAndHighlights(analysis, isPDF) {
-  // Clear previous content
+  // Clear previous content safely
   const contentContainer = document.getElementById('content-container');
-  contentContainer.innerHTML = '';
+  while (contentContainer.firstChild) {
+    contentContainer.removeChild(contentContainer.firstChild);
+  }
   
   // Hide the main container
   document.getElementById('main-container').style.display = 'none';
   
-  // Create content
+  // Create content dynamically using DOM methods
   const content = document.createElement('div');
   content.style.cssText = `
     background: white;
@@ -559,60 +597,87 @@ function displaySummaryAndHighlights(analysis, isPDF) {
     width: 100%;
   `;
   
-  // Create HTML for highlights
-  let highlightsHTML = '';
+  // Create content dynamically using DOM methods
+  const heading = document.createElement('h3');
+  heading.textContent = 'Content Summary';
+  content.appendChild(heading);
+  
+  const summary = document.createElement('p');
+  summary.style.lineHeight = '1.5';
+  summary.textContent = analysis.summary;
+  content.appendChild(summary);
+  
+  // Add key highlights section if available
   if (analysis.highlights && analysis.highlights.length) {
-    highlightsHTML = `
-      <h4>Key Highlights:</h4>
-      <ul style="padding-left: 20px;">
-        ${analysis.highlights.map(highlight => 
-          `<li style="margin-bottom: 8px; color: #0060df;">${highlight}</li>`
-        ).join('')}
-      </ul>
-    `;
+    const highlightsHeading = document.createElement('h4');
+    highlightsHeading.textContent = 'Key Highlights:';
+    content.appendChild(highlightsHeading);
+    
+    const highlightsList = document.createElement('ul');
+    highlightsList.style.paddingLeft = '20px';
+    
+    analysis.highlights.forEach(highlight => {
+      const listItem = document.createElement('li');
+      listItem.style.marginBottom = '8px';
+      listItem.style.color = '#0060df';
+      listItem.textContent = highlight;
+      highlightsList.appendChild(listItem);
+    });
+    
+    content.appendChild(highlightsList);
   }
   
-  // Show PDF-specific message
-  let pdfMessage = '';
+  // Add PDF-specific message if applicable
   if (isPDF) {
-    pdfMessage = `
-      <div style="margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
-        <strong>Note:</strong> PDF highlighting is not available directly in the document. 
-        The key passages are listed above.
-      </div>
-    `;
+    const pdfMessageDiv = document.createElement('div');
+    pdfMessageDiv.style.marginTop = '15px';
+    pdfMessageDiv.style.padding = '10px';
+    pdfMessageDiv.style.backgroundColor = '#f0f0f0';
+    pdfMessageDiv.style.borderRadius = '4px';
+    
+    const noteStrong = document.createElement('strong');
+    noteStrong.textContent = 'Note:';
+    pdfMessageDiv.appendChild(noteStrong);
+    
+    // Add text node after the strong element
+    pdfMessageDiv.appendChild(document.createTextNode(' PDF highlighting is not available directly in the document. The key passages are listed above.'));
+    
+    content.appendChild(pdfMessageDiv);
   }
   
-  content.innerHTML = `
-    <h3>Content Summary</h3>
-    <p style="line-height: 1.5;">${analysis.summary}</p>
-    
-    ${highlightsHTML}
-    ${pdfMessage}
-    
-    <div style="display: flex; justify-content: space-between; margin-top: 15px;">
-      <button id="back-button" style="
-        padding: 8px 16px;
-        background-color: #0060df;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-      ">Back</button>
-      
-      ${!isPDF ? `
-      <button id="toggle-highlights" style="
-        padding: 8px 16px;
-        background-color: #45a049;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-      ">Toggle Highlights</button>
-      ` : ''}
-    </div>
-  `;
+  // Create button container
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.display = 'flex';
+  buttonContainer.style.justifyContent = 'space-between';
+  buttonContainer.style.marginTop = '15px';
   
+  // Create back button
+  const backButton = document.createElement('button');
+  backButton.id = 'back-button';
+  backButton.textContent = 'Back';
+  backButton.style.padding = '8px 16px';
+  backButton.style.backgroundColor = '#0060df';
+  backButton.style.color = 'white';
+  backButton.style.border = 'none';
+  backButton.style.borderRadius = '4px';
+  backButton.style.cursor = 'pointer';
+  buttonContainer.appendChild(backButton);
+  
+  // Create toggle highlights button for non-PDF content
+  if (!isPDF) {
+    const toggleButton = document.createElement('button');
+    toggleButton.id = 'toggle-highlights';
+    toggleButton.textContent = 'Toggle Highlights';
+    toggleButton.style.padding = '8px 16px';
+    toggleButton.style.backgroundColor = '#45a049';
+    toggleButton.style.color = 'white';
+    toggleButton.style.border = 'none';
+    toggleButton.style.borderRadius = '4px';
+    toggleButton.style.cursor = 'pointer';
+    buttonContainer.appendChild(toggleButton);
+  }
+  
+  content.appendChild(buttonContainer);
   contentContainer.appendChild(content);
   
   // Resize popup window to fit content
@@ -629,7 +694,12 @@ function displaySummaryAndHighlights(analysis, isPDF) {
   
   // Add event listeners to buttons
   document.getElementById('back-button').addEventListener('click', () => {
-    contentContainer.innerHTML = '';
+    // Clear the content container safely
+    const contentContainer = document.getElementById('content-container');
+    while (contentContainer.firstChild) {
+      contentContainer.removeChild(contentContainer.firstChild);
+    }
+    
     document.getElementById('main-container').style.display = 'flex';
     
     // Resize back to default
