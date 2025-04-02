@@ -1,0 +1,52 @@
+{
+  "manifest_version": 2,
+  "name": "AI Highlighter",
+  "version": "1.1",
+  "description": "Summarizes webpages and PDF files, highlighting key passages for easier reading",
+  "permissions": [
+    "*://*.limesumsar.dk/*",
+    "*://limesumsar.dk/*",
+    "file://*/*",
+    "webNavigation",
+    "tabs",
+    "storage",
+    "webRequest",
+    "webRequestBlocking",
+    "*://*/*"
+  ],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*/*"],
+      "js": ["content.js"],
+      "exclude_matches": ["*://*/*.pdf"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    "lib/pdf.min.js",
+    "lib/pdf.worker.min.js"
+  ],
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "64": "icons/icon-64.png",
+      "96": "icons/icon-96.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "64": "icons/icon-64.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  }
+} 
