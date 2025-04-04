@@ -18,11 +18,11 @@ A Firefox extension that intelligently summarizes webpages and PDF documents whi
 3. Follow the prompts to complete installation
 
 ### Manual Installation (Developer Mode)
-1. Download the latest release ZIP file
+1. Download the latest release XPI file
 2. Open Firefox and navigate to `about:debugging`
 3. Click "This Firefox"
 4. Click "Load Temporary Add-on"
-5. Select the downloaded ZIP file
+5. Select the downloaded XPI file
 
 ## Setup
 
